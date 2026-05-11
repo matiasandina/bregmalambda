@@ -1,0 +1,74 @@
+{
+  "atlas": "allen_mouse_50um",
+  "resolution_um": 50,
+  "shape": {
+    "AP": 264,
+    "DV": 160,
+    "ML": 228
+  },
+  "annotation_100um": {
+    "shape": [
+      132,
+      80,
+      114
+    ],
+    "dtype": "uint32",
+    "file": "annotation_100um.u32.bin"
+  },
+  "bregma_ccf_um": {
+    "AP": 5400,
+    "DV": 332,
+    "ML": 5700
+  },
+  "stereo_to_ccf_um": {
+    "ccf_AP": "bregma.AP - stereo.AP",
+    "ccf_DV": "bregma.DV + stereo.DV",
+    "ccf_ML": "bregma.ML + stereo.ML"
+  },
+  "views": {
+    "coronal": {
+      "fixed_axis": "AP",
+      "n_slices": 264,
+      "image_axes": {
+        "x": "ML",
+        "y": "DV"
+      },
+      "image_size_px": [
+        228,
+        160
+      ],
+      "x_flipped": false,
+      "y_flipped": false
+    },
+    "sagittal": {
+      "fixed_axis": "ML",
+      "n_slices": 228,
+      "image_axes": {
+        "x": "AP",
+        "y": "DV"
+      },
+      "image_size_px": [
+        264,
+        160
+      ],
+      "x_flipped": true,
+      "y_flipped": false,
+      "note": "image is flipped LR so anterior is on the right"
+    },
+    "horizontal": {
+      "fixed_axis": "DV",
+      "n_slices": 160,
+      "image_axes": {
+        "x": "ML",
+        "y": "AP"
+      },
+      "image_size_px": [
+        228,
+        264
+      ],
+      "x_flipped": false,
+      "y_flipped": true,
+      "note": "image is flipped UD so anterior is at the top"
+    }
+  }
+}

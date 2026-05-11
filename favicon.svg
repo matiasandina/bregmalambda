@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- dark background, rounded corners -->
+  <rect width="64" height="64" rx="10" fill="#08090b"/>
+  <!-- skull-curve hint: a faint arc connecting bregma to lambda -->
+  <path d="M 14 36 Q 32 22 50 36"
+        fill="none" stroke="#3a2e1d" stroke-width="2"/>
+  <!-- bregma–lambda level line (the plane the tool corrects to) -->
+  <line x1="14" y1="36" x2="50" y2="36"
+        stroke="#ffba5c" stroke-width="2" stroke-dasharray="3 3"/>
+  <!-- bregma point (anterior, on the right of view by convention here) -->
+  <circle cx="50" cy="36" r="3.5" fill="#ffba5c"/>
+  <!-- lambda point (posterior) -->
+  <circle cx="14" cy="36" r="3.5" fill="#ffba5c"/>
+  <!-- Greek lambda letter centered above -->
+  <text x="32" y="28" text-anchor="middle"
+        font-family="serif" font-style="italic" font-size="22"
+        font-weight="500" fill="#ffd28a">λ</text>
+</svg>

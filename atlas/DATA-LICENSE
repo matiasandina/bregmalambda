@@ -1,0 +1,30 @@
+Atlas-derived data files in this directory
+==========================================
+
+The slice PNG images, annotation_100um.u32.bin, structures.json,
+brain_surface_dv_idx.json / .npy, brain_bottom_dv_idx.npy and
+coords.json are derived from the Allen Mouse Brain Common Coordinate
+Framework (CCFv3), retrieved via brainglobe-atlasapi.
+
+The Allen CCFv3 is © Allen Institute for Brain Science and is
+distributed under the Creative Commons Attribution 4.0 International
+license (CC-BY 4.0):
+
+    https://creativecommons.org/licenses/by/4.0/
+
+This license is inherited by all files in this directory. CC-BY 4.0
+permits use, redistribution and the creation of derivative works
+(including for commercial purposes) provided that appropriate
+attribution is given.
+
+Required citation for any use of these files:
+
+    Wang Q, Ding S-L, Li Y, Royall J, Feng D, Lesnar P, et al.
+    The Allen Mouse Brain Common Coordinate Framework: A 3D
+    Reference Atlas. Cell. 2020 May 14;181(4):936-953.e20.
+    https://www.sciencedirect.com/science/article/pii/S0092867420304025
+
+The files in this directory are licensed independently of the rest of
+the bregma·lambda project. They are NOT covered by the CC-BY-NC-ND
+license that applies to the project's code and UI; CC-BY 4.0 is more
+permissive.

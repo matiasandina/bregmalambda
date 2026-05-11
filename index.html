@@ -1,0 +1,1934 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bregma·lambda : mouse stereotaxic trajectory planner</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=IBM+Plex+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+
+    --ink:        #08090b;
+    --ink-1:      #0c0e12;
+    --ink-2:      #11141a;
+    --ink-3:      #181c24;
+    --rule:       #232831;
+    --rule-soft:  #161a21;
+
+    --bone:       #ece9e0;
+    --bone-dim:   #b8b6ad;
+    --muted:      #6f7682;
+    --muted-2:    #4a5060;
+
+    /* phosphor / tungsten amber : the instrument accent */
+    --tungsten:   #ffba5c;
+    --tungsten-2: #ffd28a;
+    --tungsten-glow: rgba(255, 186, 92, 0.18);
+
+    /* clinical secondaries (preserved from original swatches) */
+    --cyan:       #7be0ff;
+    --cyan-dim:   rgba(123, 224, 255, 0.6);
+    --rose:       #ff6f86;
+    --rose-dim:   rgba(255, 111, 134, 0.6);
+
+    --serif: "Fraunces", "Times New Roman", serif;
+    --sans:  "IBM Plex Sans", system-ui, sans-serif;
+    --mono:  "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--bone);
+    background:
+      radial-gradient(1200px 700px at 8% -10%, rgba(255,186,92,0.05), transparent 60%),
+      radial-gradient(1000px 600px at 100% 110%, rgba(123,224,255,0.04), transparent 60%),
+      var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* film-grain overlay */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.06;
+    mix-blend-mode: overlay;
+    background-image:
+      repeating-radial-gradient(circle at 50% 50%, #fff 0, #000 1px, transparent 2px);
+    background-size: 3px 3px;
+  }
+
+  /* faint horizontal scanlines, very subtle */
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 99;
+    opacity: 0.05;
+    background-image: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 2px,
+      rgba(255,255,255,0.4) 2px,
+      rgba(255,255,255,0.4) 3px
+    );
+  }
+
+  /* ----- Header ----- */
+  header.bar {
+    display: flex;
+    align-items: baseline;
+    gap: 28px;
+    padding: 22px 32px 18px;
+    border-bottom: 1px solid var(--rule);
+    background: linear-gradient(to bottom, rgba(255,186,92,0.025), transparent);
+  }
+
+  .nameplate {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .nameplate .kicker {
+    font-family: var(--sans);
+    font-size: 10px; font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.32em;
+    color: var(--tungsten);
+  }
+  .nameplate h1 {
+    margin: 0;
+    font-family: var(--serif);
+    font-weight: 400;
+    font-variation-settings: "opsz" 144, "SOFT" 30, "WONK" 0;
+    font-size: 30px;
+    line-height: 1;
+    color: var(--bone);
+    letter-spacing: -0.01em;
+  }
+  .nameplate h1 em {
+    font-style: italic;
+    font-variation-settings: "opsz" 144, "SOFT" 80, "WONK" 1;
+    color: var(--tungsten-2);
+  }
+
+  .badges {
+    display: flex; gap: 10px;
+    margin-left: auto;
+    align-items: center;
+  }
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 5px 9px;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    color: var(--muted);
+  }
+  .badge.live {
+    color: var(--tungsten);
+    border-color: rgba(255,186,92,0.35);
+    background: var(--tungsten-glow);
+    display: flex; align-items: center; gap: 7px;
+  }
+  .badge.live::before {
+    content: ""; width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--tungsten);
+    box-shadow: 0 0 8px var(--tungsten);
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  /* ----- Main grid ----- */
+  main {
+    display: grid;
+    grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(380px, 460px);
+    gap: 0;
+    min-height: calc(100vh - 80px);
+  }
+
+  @media (max-width: 1280px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  /* shared column styling */
+  .col {
+    padding: 28px 32px;
+    border-right: 1px solid var(--rule);
+  }
+  .col:last-child { border-right: none; }
+
+  /* ----- Section headers ----- */
+  .section-head {
+    display: flex; align-items: center; gap: 10px;
+    margin: 0 0 18px;
+  }
+  .section-head .ord {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted-2);
+    letter-spacing: 0.1em;
+  }
+  .section-head .label {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.28em;
+    color: var(--bone-dim);
+  }
+  .section-head .rule {
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  .group-head {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    margin: 22px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .group-head:first-of-type { margin-top: 0; }
+  .group-head .sub {
+    display: block;
+    margin-top: 4px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--muted-2);
+    font-weight: 400;
+    line-height: 1.45;
+  }
+
+  /* ----- Inputs ----- */
+  .field {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    gap: 8px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .field:last-child { border-bottom: none; }
+
+  .field label {
+    display: flex; flex-direction: column; gap: 1px;
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--bone);
+  }
+  .field label .hint {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  input[type=number],
+  select {
+    font-family: var(--mono);
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--tungsten);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--rule);
+    border-radius: 0;
+    padding: 4px 2px 4px 8px;
+    text-align: right;
+    width: 110px;
+    transition: border-color 120ms ease, color 120ms ease;
+    -moz-appearance: textfield;
+  }
+  input[type=number]:focus,
+  select:focus {
+    outline: none;
+    border-bottom-color: var(--tungsten);
+    color: var(--tungsten-2);
+  }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+  }
+
+  select {
+    width: auto;
+    min-width: 180px;
+    font-size: 13px;
+    text-align: left;
+    padding: 4px 8px;
+    color: var(--bone);
+    cursor: pointer;
+  }
+  select option { background: var(--ink-2); color: var(--bone); }
+
+  /* the DV reference field is wider, override grid */
+  .field.wide {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  details.help {
+    margin-top: 18px;
+    padding: 12px 14px;
+    background: var(--ink-1);
+    border-left: 2px solid var(--tungsten);
+    font-size: 13px;
+    color: var(--bone-dim);
+    line-height: 1.6;
+  }
+  details.help summary {
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--tungsten);
+    user-select: none;
+    padding-bottom: 4px;
+  }
+  details.help summary:hover { color: var(--tungsten-2); }
+  details.help[open] summary { padding-bottom: 10px; border-bottom: 1px dashed var(--rule); margin-bottom: 10px; }
+  details.help b { color: var(--bone); font-weight: 500; }
+
+  /* ----- Atlas / canvases ----- */
+  .atlas-stack {
+    display: flex; flex-direction: column;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 4px;
+  }
+  .tab {
+    background: transparent;
+    border: none;
+    padding: 12px 22px 10px;
+    margin-bottom: -1px;
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.28em;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+    transition: color 140ms ease, border-color 140ms ease;
+  }
+  .tab:hover { color: var(--bone-dim); }
+  .tab.active {
+    color: var(--tungsten);
+    border-bottom-color: var(--tungsten);
+  }
+  .tab .idx {
+    font-size: 9px;
+    color: var(--muted-2);
+    margin-right: 6px;
+  }
+  .tab.active .idx { color: var(--tungsten-2); }
+
+  .view-pane { display: none; }
+  .view-pane.active { display: block; animation: fadeIn 220ms ease-out; }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .canvas-frame {
+    position: relative;
+    padding: 18px;
+    background:
+      linear-gradient(to bottom, rgba(255,186,92,0.018), transparent 40%),
+      var(--ink-1);
+    border: 1px solid var(--rule);
+  }
+  /* corner registration marks (film-negative ticks) */
+  .canvas-frame::before,
+  .canvas-frame::after,
+  .canvas-frame > .tick-tl,
+  .canvas-frame > .tick-br {
+    content: "";
+    position: absolute;
+    width: 14px; height: 14px;
+    border-color: var(--tungsten);
+    border-style: solid;
+    pointer-events: none;
+    opacity: 0.85;
+  }
+  .canvas-frame::before { /* top-right */
+    top: -1px; right: -1px;
+    border-width: 1px 1px 0 0;
+  }
+  .canvas-frame::after { /* bottom-left */
+    bottom: -1px; left: -1px;
+    border-width: 0 0 1px 1px;
+  }
+  .canvas-frame .tick-tl {
+    top: -1px; left: -1px;
+    border-width: 1px 0 0 1px;
+  }
+  .canvas-frame .tick-br {
+    bottom: -1px; right: -1px;
+    border-width: 0 1px 1px 0;
+  }
+
+  .canvas-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    margin-bottom: 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+  }
+  .canvas-meta .plane {
+    color: var(--tungsten);
+    font-weight: 700;
+    letter-spacing: 0.32em;
+  }
+  .canvas-meta .axes {
+    color: var(--bone-dim);
+  }
+
+  canvas {
+    display: block;
+    background: #000;
+    image-rendering: pixelated;
+    width: 100%; height: auto;
+    max-width: 100%;
+    border: 1px solid var(--rule-soft);
+  }
+
+  .scale-row {
+    display: flex; justify-content: space-between;
+    margin-top: 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted-2);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* ----- Rig recipe (readout) ----- */
+  .readout {
+    font-family: var(--sans);
+    color: var(--bone);
+  }
+
+  .readout h2 {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.28em;
+    color: var(--muted);
+    margin: 28px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .readout h2:first-child {
+    margin-top: 0;
+  }
+
+  .readout ol {
+    list-style: none;
+    margin: 0; padding: 0;
+    counter-reset: step;
+  }
+  .readout ol li {
+    position: relative;
+    counter-increment: step;
+    padding: 14px 0 14px 52px;
+    border-bottom: 1px solid var(--rule-soft);
+    font-size: 15.5px;
+    line-height: 1.55;
+    color: var(--bone);
+  }
+  .readout ol li:last-child { border-bottom: none; padding-bottom: 0; }
+  .readout ol li::before {
+    content: counter(step, decimal-leading-zero);
+    position: absolute;
+    left: 0; top: 14px;
+    font-family: var(--serif);
+    font-variation-settings: "opsz" 144, "SOFT" 50;
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 1;
+    color: var(--tungsten);
+    letter-spacing: 0.02em;
+  }
+
+  .readout b {
+    font-weight: 500;
+    color: var(--bone);
+  }
+
+  /* the .num span is emitted by the existing JS for emphasised values */
+  .readout .num {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--tungsten);
+    background: linear-gradient(to bottom, transparent 60%, var(--tungsten-glow) 60%);
+    padding: 0 2px;
+    letter-spacing: 0.01em;
+  }
+  .readout .secondary {
+    display: block;
+    margin-top: 6px;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* legend swatch colours match the canvas overlays */
+  .swatch-target { color: var(--rose); font-weight: 500; }
+  .swatch-entry  { color: var(--cyan); font-weight: 500; }
+  .swatch-probe  { color: var(--tungsten); font-weight: 500; }
+
+  /* Prominent target block at top of the recipe */
+  .target-card {
+    background: var(--ink-1);
+    border-left: 3px solid var(--cyan);
+    padding: 12px 14px;
+    margin-bottom: 18px;
+  }
+  .target-card .label-row {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .target-card .coords {
+    font-family: var(--mono);
+    font-size: 19px;
+    color: var(--bone);
+    line-height: 1.4;
+  }
+  .target-card .coords b {
+    color: var(--cyan);
+    font-weight: 700;
+  }
+  .target-card .meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* Prominent region badge */
+  .region-card {
+    background: var(--ink-1);
+    border-left: 3px solid var(--tungsten);
+    padding: 14px 16px;
+    margin-bottom: 18px;
+  }
+  .region-card .label-row {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .region-card .acronym {
+    font-family: var(--serif);
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+    font-size: 32px;
+    font-weight: 500;
+    color: var(--tungsten);
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .region-card .name {
+    margin-top: 6px;
+    font-size: 14px;
+    color: var(--bone-dim);
+    line-height: 1.4;
+  }
+  .region-card.warn {
+    border-left-color: var(--rose);
+  }
+  .region-card.warn .acronym { color: var(--rose); font-size: 18px; }
+
+  /* Collapsible sections inside the readout */
+  .readout details.subsection {
+    margin-top: 16px;
+    border-top: 1px solid var(--rule);
+    padding-top: 10px;
+  }
+  .readout details.subsection > summary {
+    cursor: pointer;
+    list-style: none;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    padding-bottom: 6px;
+    user-select: none;
+  }
+  .readout details.subsection > summary::-webkit-details-marker { display: none; }
+  .readout details.subsection > summary::before {
+    content: "+ ";
+    color: var(--tungsten);
+    font-weight: 700;
+  }
+  .readout details.subsection[open] > summary::before { content: "− "; }
+  .readout details.subsection > summary:hover { color: var(--bone-dim); }
+  .readout details.subsection .body { padding-top: 8px; }
+
+  /* Method/calibration dropdown beneath the atlas views */
+  .method-notes {
+    margin-top: 22px;
+    background: var(--ink-1);
+    border: 1px solid var(--rule);
+  }
+  .method-notes > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 12px 14px;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--tungsten);
+    user-select: none;
+  }
+  .method-notes > summary::-webkit-details-marker { display: none; }
+  .method-notes > summary::before {
+    content: "+ ";
+    font-weight: 700;
+  }
+  .method-notes[open] > summary::before { content: "− "; }
+  .method-notes .body {
+    padding: 4px 16px 16px;
+    border-top: 1px solid var(--rule);
+    font-size: 13px;
+    color: var(--bone-dim);
+    line-height: 1.6;
+  }
+  .method-notes .body b { color: var(--bone); }
+  .method-notes .body code {
+    font-family: var(--mono); font-size: 12px;
+    background: var(--ink-2); padding: 1px 5px; border-radius: 2px;
+    color: var(--tungsten);
+  }
+
+  .banner {
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    border: 1px solid;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    line-height: 1.5;
+  }
+  .banner .label {
+    display: block;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    font-size: 10px;
+    margin-bottom: 4px;
+  }
+  .banner.warn {
+    color: var(--rose);
+    border-color: rgba(255,111,134,0.45);
+    background: rgba(255,111,134,0.08);
+  }
+  .banner.ok {
+    color: var(--tungsten);
+    border-color: rgba(255,186,92,0.35);
+    background: var(--tungsten-glow);
+  }
+
+  /* "Target" / "Geometry" sections render as flowing text outside the OL */
+  .readout > div {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--bone);
+    margin-top: 4px;
+  }
+
+  /* ----- Loading / error state ----- */
+  .readout:has-text("loading"),
+  .readout:not(:has(*)) {
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  /* ----- Decorative footer caption ----- */
+  footer {
+    padding: 14px 32px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted-2);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    display: flex; justify-content: space-between;
+  }
+  footer em {
+    font-family: var(--serif);
+    font-style: italic;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 12px;
+    color: var(--bone-dim);
+  }
+  footer .byline {
+    color: var(--tungsten);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255, 186, 92, 0.35);
+    padding-bottom: 1px;
+    transition: border-color 140ms ease;
+  }
+  footer .byline:hover { border-bottom-color: var(--tungsten); }
+
+  /* Inline support / attribution block in the recipe column */
+  .support-card {
+    margin-top: 28px;
+    padding: 16px 16px 18px;
+    background: linear-gradient(180deg,
+      rgba(255, 186, 92, 0.06) 0%,
+      rgba(255, 186, 92, 0.02) 100%);
+    border: 1px solid rgba(255, 186, 92, 0.25);
+    border-left: 3px solid var(--tungsten);
+    text-align: left;
+  }
+  .support-card .support-msg {
+    font-family: var(--serif);
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+    font-size: 16px;
+    color: var(--bone);
+    line-height: 1.45;
+  }
+  .support-card .support-msg .heart   { color: #ff6f86; }
+  .support-card .support-msg .syringe { color: var(--cyan); }
+  .support-card .support-msg a {
+    color: var(--tungsten);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255, 186, 92, 0.45);
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+  .support-card .support-msg a:hover {
+    color: var(--tungsten-2);
+    border-bottom-color: var(--tungsten);
+  }
+  .support-card .support-cta {
+    margin-top: 10px;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--bone-dim);
+    line-height: 1.55;
+  }
+  .support-card .bmc-link {
+    color: var(--tungsten);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255, 186, 92, 0.5);
+    padding-bottom: 1px;
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+  .support-card .bmc-link::before {
+    content: "☕ ";
+  }
+  .support-card .bmc-link:hover {
+    color: var(--tungsten-2);
+    border-bottom-color: var(--tungsten);
+  }
+
+  /* Floating "buy me a coffee" pill, bottom-right */
+  .bmc-button {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 9px 10px;
+    background: rgba(20, 18, 14, 0.92);
+    border: 1px solid rgba(255, 186, 92, 0.45);
+    border-radius: 999px;
+    color: var(--tungsten);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-decoration: none;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+    transition: gap 200ms ease, padding 200ms ease, background 140ms ease,
+                border-color 140ms ease, color 140ms ease;
+    overflow: hidden;
+  }
+  .bmc-button .bmc-icon {
+    display: inline-block;
+    font-size: 16px;
+    line-height: 1;
+    transform: translateY(-1px);
+  }
+  .bmc-button .bmc-label {
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    opacity: 0;
+    transition: max-width 220ms ease, opacity 180ms ease 60ms;
+  }
+  .bmc-button:hover {
+    gap: 8px;
+    padding: 9px 16px 9px 12px;
+    background: rgba(255, 186, 92, 0.10);
+    border-color: var(--tungsten);
+    color: var(--tungsten-2);
+  }
+  .bmc-button:hover .bmc-label {
+    max-width: 200px;
+    opacity: 1;
+  }
+
+  /* ----- Entrance animation ----- */
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  header.bar     { animation: rise 600ms ease-out both; }
+  .col.controls  { animation: rise 700ms ease-out both 80ms; }
+  .col.atlas     { animation: rise 800ms ease-out both 160ms; }
+  .col.recipe    { animation: rise 900ms ease-out both 240ms; }
+  footer         { animation: rise 1000ms ease-out both 320ms; }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="nameplate">
+    <span class="kicker">Mouse stereotaxic trajectory planner</span>
+    <h1>bregma <em>λ</em> lambda</h1>
+  </div>
+  <div class="badges">
+    <span class="badge">Allen CCFv3</span>
+    <span class="badge">50 µm iso</span>
+    <span class="badge" title="Chon 2019 : bregma fiducial 332 µm into the CCF dorsal volume">bregma DV = 332 µm</span>
+    <span class="badge" title="CCFv3 to stereotaxic: pitch rotation + per-axis scaling (Pinpoint)">CCF→stereo &nbsp;pitch +5°, scale AP 1.031 / ML 0.952 / DV 0.885</span>
+    <span class="badge live">live</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ LEFT: Controls ============ -->
+  <aside class="col controls">
+
+    <div class="section-head">
+      <span class="ord">/01</span>
+      <span class="label">Inputs</span>
+      <span class="rule"></span>
+    </div>
+
+    <div class="group-head">Target · mm from bregma</div>
+
+    <div class="field">
+      <label>AP <span class="hint">+ ant   −  post</span></label>
+      <input id="ap" type="number" step="0.1" value="-1.5">
+    </div>
+    <div class="field">
+      <label>ML <span class="hint">+ right  −  left</span></label>
+      <input id="ml" type="number" step="0.1" value="0.2">
+    </div>
+    <div class="field">
+      <label>DV <span class="hint">depth · sign ignored</span></label>
+      <input id="dv" type="number" step="0.1" value="-5.6">
+    </div>
+
+    <div class="field wide">
+      <label>DV reference <span class="hint">where DV = 0</span></label>
+      <select id="dvRef">
+        <option value="skull" selected>from local skull (curved)</option>
+        <option value="bregma">from bregma plane (flat)</option>
+        <option value="brain">from local brain pial (atlas)</option>
+      </select>
+    </div>
+
+    <div class="group-head">Probe angles<span class="sub">Degrees from vertical. 0 = straight down.</span></div>
+
+    <div class="field">
+      <label>ML tilt <span class="hint">tip toward + ML</span></label>
+      <input id="mlTilt" type="number" step="1" value="0">
+    </div>
+    <div class="field">
+      <label>AP tilt <span class="hint">tip toward + AP</span></label>
+      <input id="apTilt" type="number" step="1" value="0">
+    </div>
+
+    <div class="group-head">Bregma offset (µm in CCF)<span class="sub">Tune if regions look off. If targets at AP=0 look ~0.3–0.5 mm anterior in your mouse, try AP&nbsp;=&nbsp;5700–5800.</span></div>
+    <div class="field"><label>AP <span class="hint">Chon 5400, alt 5739</span></label><input id="bregmaAP" type="number" step="50" value="5400"></div>
+    <div class="field"><label>ML <span class="hint">Chon 5700</span></label><input id="bregmaML" type="number" step="50" value="5700"></div>
+    <div class="field"><label>DV <span class="hint">Chon 332</span></label><input id="bregmaDV" type="number" step="10" value="332"></div>
+
+    <div class="group-head">Probe geometry</div>
+
+    <div class="field wide" style="display:flex; align-items:center; gap:10px;">
+      <label style="margin: 0; flex: 1;">
+        <input type="checkbox" id="probeWidthOn" style="vertical-align: middle; margin-right: 6px;">
+        Custom probe width
+      </label>
+      <input id="probeWidthUm" type="number" step="50" value="400" style="width: 90px;">
+      <span class="hint" style="margin: 0;">µm</span>
+    </div>
+
+    <details class="help">
+      <summary>Axis conventions</summary>
+      <p style="margin: 0 0 8px;">
+        <b>AP</b> anterior(+) / posterior(−).
+        <b>ML</b> right(+) / left(−).
+        <b>DV</b> depth into brain : sign ignored.
+      </p>
+      <p style="margin: 0 0 8px;">
+        <b>ML tilt</b>: rotation in the coronal plane. Positive tilt sends the tip toward +ML, so the entry hole sits on the −ML side of the target.
+      </p>
+      <p style="margin: 0;">
+        <b>AP tilt</b>: rotation in the sagittal plane. Positive tilt sends the tip toward +AP, so the entry hole sits on the −AP side of the target.
+      </p>
+    </details>
+
+  </aside>
+
+  <!-- ============ CENTER: Atlas views ============ -->
+  <section class="col atlas">
+
+    <div class="section-head">
+      <span class="ord">/02</span>
+      <span class="label">Atlas Views</span>
+      <span class="rule"></span>
+    </div>
+
+    <div class="atlas-stack">
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-pane="cor" role="tab"><span class="idx">A</span>Coronal</button>
+        <button class="tab" data-pane="sag" role="tab"><span class="idx">B</span>Sagittal</button>
+      </div>
+
+      <div class="view-pane active" data-pane="cor">
+        <div class="canvas-meta">
+          <span class="plane">Coronal</span>
+          <span class="axes">ML horizontal · DV vertical</span>
+        </div>
+        <div class="canvas-frame">
+          <span class="tick-tl"></span><span class="tick-br"></span>
+          <canvas id="coronal" width="912" height="640"></canvas>
+        </div>
+        <div class="scale-row">
+          <span>− ML &nbsp; left</span>
+          <span>+ ML &nbsp; right</span>
+        </div>
+      </div>
+
+      <div class="view-pane" data-pane="sag">
+        <div class="canvas-meta">
+          <span class="plane">Sagittal</span>
+          <span class="axes">AP horizontal · DV vertical · anterior right</span>
+        </div>
+        <div class="canvas-frame">
+          <span class="tick-tl"></span><span class="tick-br"></span>
+          <canvas id="sagittal" width="1056" height="640"></canvas>
+        </div>
+        <div class="scale-row">
+          <span>− AP &nbsp; posterior</span>
+          <span>+ AP &nbsp; anterior</span>
+        </div>
+      </div>
+
+    </div>
+
+    <details class="method-notes">
+      <summary>Method: CCFv3 to stereotaxic corrections applied</summary>
+      <div class="body">
+        Allen CCFv3 is not stereotaxic.
+        <a href="https://www.sciencedirect.com/science/article/pii/S0092867420304025"
+           target="_blank" rel="noopener"
+           style="color: var(--tungsten); text-decoration: underline;">Wang
+           et&nbsp;al. <em>Cell</em> 2020</a>
+        explicitly state it is "not suitable for determining stereotaxic
+        coordinates." The atlas was built without skull fiducials, so
+        bregma position, pitch, and absolute scale all need correction.
+        <br><br>
+        <b style="color: var(--tungsten);">This coordinate planner applies the following corrections in order:</b>
+        <ol style="margin: 8px 0 8px 18px; padding: 0;">
+          <li><b>Pitch <code>+5.0°</code></b> rotation around bregma.
+              The atlas brain sits tilted ~5° nose-up relative to a
+              real mouse on a stereotaxic frame with bregma and lambda
+              at the same DV. To compare apples to apples we rotate
+              every atlas point around bregma onto the flat-skull
+              plane. Effect: brain becomes shallower at posterior AP,
+              deeper at anterior AP. Source:
+              <a href="https://virtualbrainlab.org/pinpoint/in_vivo_alignment.html"
+                 target="_blank" rel="noopener" style="color: var(--tungsten);">Pinpoint
+                 / Virtual Brain Lab in-vivo alignment docs</a>.</li>
+          <li><b>Per-axis scale</b> using the Pinpoint convention:
+              <code>in_vivo = (1.031·ap, 0.952·ml, 0.885·dv)</code>.
+              The CCFv3 reference brain is roughly ~15% larger by
+              volume, but the per-axis errors are not equal. DV is
+              the biggest correction: atlas DV is ~11.5% too deep,
+              so we multiply atlas DV by 0.885. ML is ~5% too wide
+              (×0.952). AP is actually slightly too short in the
+              atlas: ×1.031 expands it back. The previous version
+              applied an isotropic 0.95 which is why DV was reading
+              too deep until now.</li>
+          <li><b>Bregma offset</b> (AP, ML, DV) in µm, tunable in the
+              left panel. This sets which CCF voxel is treated as the
+              bregma origin. Chon 2019 defaults are 5400 / 5700 / 332.
+              Many labs find AP closer to 5700:5800. Calibration
+              persists in localStorage.</li>
+        </ol>
+        Tweak <code>CCF_PITCH_DEG</code>, <code>CCF_AP_SCALE</code>,
+        <code>CCF_ML_SCALE</code>, <code>CCF_DV_SCALE</code> or
+        <code>SKULL_THICKNESS_MM</code> near the top of the JS block
+        if your strain or age systematically differs.
+        <br><br>
+        <b>Surfaces drawn on the canvas:</b><br>
+        &nbsp;&nbsp;solid amber: local outer skull (atlas pial minus 200 µm)<br>
+        &nbsp;&nbsp;faint cyan: atlas brain pial (rolling-min smoothed across midline fissure)<br>
+        &nbsp;&nbsp;dashed amber: bregma plane (stereotaxic DV = 0), tilted after pitch correction<br><br>
+        Real mouse skulls still vary by ±0.5 mm even after all corrections.
+        Trust your dura-touch over any atlas number.
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ RIGHT: Rig recipe ============ -->
+  <aside class="col recipe">
+
+    <div class="section-head">
+      <span class="ord">/03</span>
+      <span class="label">Rig Recipe</span>
+      <span class="rule"></span>
+    </div>
+
+    <div class="readout" id="readout">loading atlas…</div>
+
+    <div class="support-card">
+      <div class="support-msg">
+        Built with <span class="heart">❤️</span> and <span class="syringe">💉</span> by
+        <a href="https://matiasandina.com" target="_blank" rel="noopener">Matias Andina</a>.
+      </div>
+      <div class="support-cta">
+        If this saved you a botched implant,
+        <a href="https://buymeacoffee.com/matiasandina" target="_blank" rel="noopener" class="bmc-link">
+          buy me a coffee
+        </a>.
+      </div>
+    </div>
+
+  </aside>
+
+</main>
+
+<footer>
+  <span>
+    Built by <a href="https://matiasandina.com" target="_blank" rel="noopener" class="byline">Matias Andina</a>
+    &nbsp;·&nbsp; Allen CCFv3 (CC BY 4.0), Chon 2019 bregma offset, Pinpoint scale convention
+  </span>
+  <em>For research use only. Verify on your own animal.</em>
+</footer>
+
+<a href="https://buymeacoffee.com/matiasandina"
+   target="_blank" rel="noopener"
+   class="bmc-button"
+   title="Buy me a coffee">
+  <span class="bmc-icon">☕</span>
+  <span class="bmc-label">buy me a coffee</span>
+</a>
+
+<script>
+const SCALE = 4;   // canvas zoom (px per atlas voxel along x)
+// Vertical range shown on each canvas, in stereotaxic mm from skull.
+// Negative values are dorsal to the bregma plane (skull / above-skull headroom).
+// Atlas image starts at stereo DV = -bregma_offset (≈ -0.332 mm) so its top voxel
+// sits 332 µm dorsal to the skull plane : i.e. the 332 µm Chon offset is now
+// visible as physical headroom above the brain image.
+const DV_VIS_MIN_MM = -1.0;   // 1 mm above bregma plane shown
+const DV_VIS_MAX_MM = 8.0;    // 8 mm below bregma plane shown
+// estimated thickness of skull + dura between cortex pial and the outer skull
+// surface : used to draw the curved skull outline. Adult mouse, parietal: ~0.2 mm.
+const SKULL_THICKNESS_MM = 0.20;
+
+// =====================================================================
+// CCFv3 → stereotaxic correction
+// =====================================================================
+// Allen CCFv3 was built without skull fiducials (Wang et al., Cell 2020:
+// "the relationship of the template to fiducial landmarks of the skull
+//  (e.g. Bregma) are unknown, making CCFv3 not suitable for determining
+//  stereotaxic coordinates").
+//
+// We apply two corrections on top of the Chon 2019 bregma offset:
+//
+//   1. Pitch rotation (CCF_PITCH_DEG, default +5°) : CCFv3 has a known
+//      pitch of ≥5° relative to a bregma–lambda-leveled skull (Pinpoint
+//      / Virtual Brain Lab in-vivo alignment docs). Positive pitch
+//      lifts posterior atlas DV → shallower brain at posterior AP, which
+//      matches the bench reality.
+//
+//   2. Per-axis scaling (CCF_AP_SCALE 1.031, CCF_ML_SCALE 0.952,
+//      CCF_DV_SCALE 0.885): Pinpoint convention. CCFv3 is roughly
+//      ~15% larger by volume but the per-axis errors are not equal:
+//      DV is the biggest correction (~11.5% shrink), ML is ~5%
+//      shrink, AP is actually slightly inflated (~3%).
+//
+// Applied as: stereo = ROTATE(SCALE(atlas), +pitch).
+// All atlas lookups (brain pial, brain bottom, slice picking) and all
+// point placements on the canvas pass through these two transforms.
+// Tune the constants if you find the depths off for your strain/age.
+const CCF_PITCH_DEG = 5.0;
+// Per-axis scale factors that convert atlas coordinates to in-vivo
+// stereotaxic. Values follow Pinpoint / Virtual Brain Lab convention
+// (in_vivo = 1.031·ap_atlas, 0.952·ml_atlas, 0.885·dv_atlas). DV is
+// the biggest correction (~11.5%), AP is actually slightly inflated
+// (atlas underestimates AP by ~3%), ML is shrunk by ~5%.
+const CCF_AP_SCALE = 1.031;
+const CCF_ML_SCALE = 0.952;
+const CCF_DV_SCALE = 0.885;
+
+// Atlas → stereo: scale per-axis first, then apply pitch rotation
+// around bregma (CCF_PITCH_DEG = +5° in our sign convention, equivalent
+// to Pinpoint's pitch = −5°: both rotate the atlas so the bregma–lambda
+// line ends up flat in stereotaxic).
+function ccfToStereoApDv(ap_a_mm, dv_a_mm) {
+  const ap_sc = ap_a_mm * CCF_AP_SCALE;
+  const dv_sc = dv_a_mm * CCF_DV_SCALE;
+  const t = CCF_PITCH_DEG * Math.PI / 180;
+  const ap_s = ap_sc * Math.cos(t) - dv_sc * Math.sin(t);
+  const dv_s = ap_sc * Math.sin(t) + dv_sc * Math.cos(t);
+  return { ap: ap_s, dv: dv_s };
+}
+function stereoToCcfApDv(ap_s_mm, dv_s_mm) {
+  // inverse of the above: undo rotation first, then unscale per-axis
+  const t = CCF_PITCH_DEG * Math.PI / 180;
+  const ap_sc =  ap_s_mm * Math.cos(t) + dv_s_mm * Math.sin(t);
+  const dv_sc = -ap_s_mm * Math.sin(t) + dv_s_mm * Math.cos(t);
+  return { ap: ap_sc / CCF_AP_SCALE, dv: dv_sc / CCF_DV_SCALE };
+}
+// ML has no rotation, just the per-axis scale.
+function stereoMlToCcfMl(ml_s_mm) { return ml_s_mm / CCF_ML_SCALE; }
+function ccfMlToStereoMl(ml_a_mm) { return ml_a_mm * CCF_ML_SCALE; }
+const COR = document.getElementById('coronal');
+const SAG = document.getElementById('sagittal');
+const RO  = document.getElementById('readout');
+
+let coords = null;
+let surface = null; // {step_voxels, data: [[..], ..], shape_ap_ml: [nAP, nML]}
+let annotation = null;   // Uint32Array of region IDs at 100 µm
+let annotationShape = null; // [nAP, nDV, nML] at 100 µm
+let structures = null;   // { id: { acronym, name } }
+const imgCache = new Map();
+
+function loadImg(view, idx) {
+  const key = `${view}/${idx}`;
+  if (imgCache.has(key)) return imgCache.get(key);
+  const p = new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = rej;
+    im.src = `atlas/${view}/${String(idx).padStart(4,'0')}.png`;
+  });
+  imgCache.set(key, p);
+  return p;
+}
+
+async function init() {
+  const c = await fetch('atlas/coords.json').then(r => r.json());
+  coords = c;
+  const s = await fetch('atlas/brain_surface_dv_idx.json').then(r => r.json());
+  surface = s;
+  // region annotation + structure dict
+  const annInfo = coords.annotation_100um;
+  if (annInfo) {
+    const buf = await fetch('atlas/' + annInfo.file).then(r => r.arrayBuffer());
+    annotation = new Uint32Array(buf);
+    annotationShape = annInfo.shape;
+    structures = await fetch('atlas/structures.json').then(r => r.json());
+  }
+  // initialize bregma override inputs: prefer localStorage > coords default
+  const stored = (k, fallback) => {
+    const v = localStorage.getItem(k);
+    return (v == null || isNaN(parseFloat(v))) ? fallback : v;
+  };
+  document.getElementById('bregmaAP').value = stored('bregmaAP', coords.bregma_ccf_um.AP);
+  document.getElementById('bregmaML').value = stored('bregmaML', coords.bregma_ccf_um.ML);
+  document.getElementById('bregmaDV').value = stored('bregmaDV', coords.bregma_ccf_um.DV);
+  for (const k of ['bregmaAP','bregmaML','bregmaDV']) {
+    document.getElementById(k).addEventListener('change',
+      e => localStorage.setItem(k, e.target.value));
+  }
+  // px per stereotaxic mm along the DV axis (canvas vertical)
+  const PX_PER_MM = SCALE / (coords.resolution_um / 1000);  // 4 / 0.05 = 80
+  const canvasH = Math.round((DV_VIS_MAX_MM - DV_VIS_MIN_MM) * PX_PER_MM);  // 720 px
+  COR.width  = coords.views.coronal.image_size_px[0]  * SCALE;
+  COR.height = canvasH;
+  SAG.width  = coords.views.sagittal.image_size_px[0] * SCALE;
+  SAG.height = canvasH;
+  for (const id of ['ap','ml','dv','mlTilt','apTilt','dvRef','probeWidthOn','probeWidthUm','bregmaAP','bregmaML','bregmaDV']) {
+    document.getElementById(id).addEventListener('input', render);
+    document.getElementById(id).addEventListener('change', render);
+  }
+  // tab switching
+  for (const btn of document.querySelectorAll('.tab')) {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.pane;
+      for (const t of document.querySelectorAll('.tab'))       t.classList.toggle('active', t.dataset.pane === target);
+      for (const p of document.querySelectorAll('.view-pane')) p.classList.toggle('active', p.dataset.pane === target);
+    });
+  }
+  render();
+}
+
+function stereoToCcfUm(ap_mm, ml_mm, dv_skull_mm) {
+  const { ap: ap_a, dv: dv_a } = stereoToCcfApDv(ap_mm, dv_skull_mm);
+  const ml_a = stereoMlToCcfMl(ml_mm);
+  return {
+    ap: coords.bregma_ccf_um.AP - ap_a * 1000,
+    dv: coords.bregma_ccf_um.DV + dv_a * 1000,
+    ml: coords.bregma_ccf_um.ML + ml_a * 1000,
+  };
+}
+
+function ccfUmToVoxel(ccf) {
+  const r = coords.resolution_um;
+  return { i: ccf.ap / r, j: ccf.dv / r, k: ccf.ml / r };
+}
+
+// look up topmost or deepest annotated voxel at stereotaxic (AP_mm, ML_mm),
+// return DV in CORRECTED stereotaxic mm from bregma plane (CCF→stereo applied).
+// Approximates atlas_AP ≈ stereo_AP for the lookup (small-angle / shallow).
+function brainColumnDvMm(ap_mm, ml_mm, which /* "top" | "bottom" */) {
+  const r = coords.resolution_um;
+  // small-angle approximation on AP; per-axis scales applied.
+  const atlas_ap_mm = ap_mm / CCF_AP_SCALE;
+  const atlas_ml_mm = ml_mm / CCF_ML_SCALE;
+  const i = Math.round((coords.bregma_ccf_um.AP - atlas_ap_mm * 1000) / r);
+  const k = Math.round((coords.bregma_ccf_um.ML + atlas_ml_mm * 1000) / r);
+  const step = surface.step_voxels;
+  const ds_i = Math.floor(i / step), ds_k = Math.floor(k / step);
+  const [nAP, nML] = surface.shape_ap_ml;
+  if (ds_i < 0 || ds_i >= nAP || ds_k < 0 || ds_k >= nML) return null;
+  const grid = which === 'bottom' ? surface.bottom : surface.data;
+  const j = grid[ds_i][ds_k];
+  if (j < 0) return null;
+  const atlas_dv_mm = (j * r - coords.bregma_ccf_um.DV) / 1000;
+  return ccfToStereoApDv(atlas_ap_mm, atlas_dv_mm).dv;
+}
+function brainSurfaceDvSkullMm(ap_mm, ml_mm) { return brainColumnDvMm(ap_mm, ml_mm, 'top'); }
+function brainBottomDvSkullMm(ap_mm, ml_mm)  { return brainColumnDvMm(ap_mm, ml_mm, 'bottom'); }
+
+// Local outer-skull DV at (AP, ML) in stereotaxic mm from the bregma plane.
+// Modeled as: atlas brain pial at that column minus an estimated skull+dura
+// thickness. The atlas isn't a skull atlas, so this is an approximation :
+// matches the user's "skull goes down ~0.05–0.1 mm per mm from bregma" rule
+// because that's how the average-mouse brain pial actually curves.
+function skullDvAtMm(ap_mm, ml_mm) {
+  const pial = brainSurfaceDvSkullMm(ap_mm, ml_mm);
+  if (pial == null) return null;
+  return pial - SKULL_THICKNESS_MM;
+}
+
+// Iteratively solve for the (AP, ML, DV) entry point where a tilted probe of
+// direction d, ending at target, crosses an arbitrary surface defined by
+// surfaceFn(ap, ml) -> DV in stereotaxic mm from bregma.
+function solveEntryOnSurface(target_ap, target_ml, target_dv_bregma_mm, d, surfaceFn) {
+  let L = target_dv_bregma_mm / d.dv;   // initial guess: flat bregma plane
+  let entry_dv = 0;
+  let onSurface = false;
+  for (let iter = 0; iter < 8; iter++) {
+    const eap = target_ap - L * d.ap;
+    const eml = target_ml - L * d.ml;
+    const surf = surfaceFn(eap, eml);
+    if (surf == null) { entry_dv = 0; break; }
+    onSurface = true;
+    const newL = (target_dv_bregma_mm - surf) / d.dv;
+    if (Math.abs(newL - L) < 1e-4) { L = newL; entry_dv = surf; break; }
+    L = newL; entry_dv = surf;
+  }
+  return {
+    onSurface,
+    length_mm: L,
+    entry: { ap: target_ap - L * d.ap, ml: target_ml - L * d.ml, dv_skull: entry_dv },
+  };
+}
+
+function computeTrajectory(target_ap, target_ml, target_dv_bregma_mm, ml_tilt_deg, ap_tilt_deg, dvRef) {
+  const ml_tilt = ml_tilt_deg * Math.PI / 180;
+  const ap_tilt = ap_tilt_deg * Math.PI / 180;
+  const d = {
+    ap: Math.sin(ap_tilt),
+    ml: Math.sin(ml_tilt) * Math.cos(ap_tilt),
+    dv: Math.cos(ml_tilt) * Math.cos(ap_tilt),
+  };
+  if (Math.abs(d.dv) < 1e-9) return null;
+
+  const refSurfaceFn = ({
+    bregma: () => 0,
+    skull:  skullDvAtMm,
+    brain:  brainSurfaceDvSkullMm,
+  })[dvRef] || skullDvAtMm;
+
+  const skullSol = solveEntryOnSurface(target_ap, target_ml, target_dv_bregma_mm, d, skullDvAtMm);
+  const refSol   = (dvRef === 'skull')
+                     ? skullSol
+                     : solveEntryOnSurface(target_ap, target_ml, target_dv_bregma_mm, d, refSurfaceFn);
+
+  return {
+    direction: d,
+    length_skull_to_target_mm: skullSol.length_mm,
+    length_ref_to_target_mm:   refSol.length_mm,
+    skullEntry: skullSol.entry,
+    refEntry:   refSol.entry,
+    target: { ap: target_ap, ml: target_ml, dv_skull: target_dv_bregma_mm },
+  };
+}
+
+function fmt(x, n=2) { return (x>=0?'+':'') + x.toFixed(n); }
+
+// Look up the Allen structure at a given CCF position (in µm). Returns
+// { id, acronym, name } or null if outside the volume / unannotated.
+function regionAtCcfUm(ap_um, dv_um, ml_um) {
+  if (!annotation || !annotationShape) return null;
+  // 100 µm voxel index
+  const i = Math.round(ap_um / 100);
+  const j = Math.round(dv_um / 100);
+  const k = Math.round(ml_um / 100);
+  const [nAP, nDV, nML] = annotationShape;
+  if (i < 0 || i >= nAP || j < 0 || j >= nDV || k < 0 || k >= nML) return null;
+  const id = annotation[i * nDV * nML + j * nML + k];
+  if (!id) return null;
+  const s = structures[id];
+  return s ? { id, acronym: s.acronym, name: s.name } : { id, acronym: '?', name: '(unknown id)' };
+}
+
+async function render() {
+  if (!coords) return;
+  // Apply user-tunable bregma offsets (overrides Chon defaults).
+  coords.bregma_ccf_um.AP = parseFloat(document.getElementById('bregmaAP').value) || 5400;
+  coords.bregma_ccf_um.ML = parseFloat(document.getElementById('bregmaML').value) || 5700;
+  coords.bregma_ccf_um.DV = parseFloat(document.getElementById('bregmaDV').value) || 332;
+  const ap = parseFloat(document.getElementById('ap').value);
+  const ml = parseFloat(document.getElementById('ml').value);
+  let dv = parseFloat(document.getElementById('dv').value);
+  const dvRef = document.getElementById('dvRef').value;
+  const mlTilt = parseFloat(document.getElementById('mlTilt').value);
+  const apTilt = parseFloat(document.getElementById('apTilt').value);
+  const probeWidthOn = document.getElementById('probeWidthOn').checked;
+  const probeWidthUm = Math.max(0, parseFloat(document.getElementById('probeWidthUm').value) || 0);
+  // half-width in canvas px (DV axis at 1 mm = pxPerMm). Same scale on x and y
+  // because the canvas is isotropic in mm-per-px after our SCALE.
+  const probeHalfPx = probeWidthOn ? (probeWidthUm / 1000) * pxPerMm() / 2 : 0;
+
+  // depth into brain is |dv|; sign-agnostic
+  const depth_mm = Math.abs(dv);
+
+  // resolve target DV in stereotaxic mm from the bregma plane (DV = 0 stereo).
+  // Three reference modes : input "depth" is measured from the chosen surface.
+  const localSkullDv = skullDvAtMm(ap, ml);
+  const localPialDv  = brainSurfaceDvSkullMm(ap, ml);
+  let target_dv_skull, refLabel;
+  if (dvRef === 'bregma') {
+    target_dv_skull = depth_mm;
+    refLabel = 'bregma plane (flat)';
+  } else if (dvRef === 'brain') {
+    if (localPialDv == null) {
+      RO.innerHTML = '<div class="banner warn"><span class="label">⚠  Off the atlas</span>(AP, ML) is outside the Allen volume : cannot use brain-pial reference.</div>';
+      return;
+    }
+    target_dv_skull = localPialDv + depth_mm;
+    refLabel = 'local brain pial';
+  } else {  // 'skull' (curved, default)
+    if (localSkullDv == null) {
+      RO.innerHTML = '<div class="banner warn"><span class="label">⚠  Off the atlas</span>(AP, ML) is outside the Allen volume : cannot use local skull reference.</div>';
+      return;
+    }
+    target_dv_skull = localSkullDv + depth_mm;
+    refLabel = 'local skull (curved)';
+  }
+  const brain_surf_mm = localPialDv;
+
+  const traj = computeTrajectory(ap, ml, target_dv_skull, mlTilt, apTilt, dvRef);
+  if (!traj) { RO.textContent = 'invalid tilt'; return; }
+
+  // CCF voxel indices for slice picking
+  const targetCcf = stereoToCcfUm(ap, ml, target_dv_skull);
+  const v = ccfUmToVoxel(targetCcf);
+
+  // atlas brain extent at the target column (used by canvas annotations + readout)
+  const brainTop = brainSurfaceDvSkullMm(ap, ml);
+  const brainBot = brainBottomDvSkullMm(ap, ml);
+  const inAtlas = (brainTop != null && brainBot != null
+                   && target_dv_skull >= brainTop && target_dv_skull <= brainBot);
+
+  // ----- Coronal -----
+  const cor = coords.views.coronal;
+  const corIdx = Math.max(0, Math.min(cor.n_slices - 1, Math.round(v.i)));
+  const corImg = await loadImg('coronal', corIdx);
+  const ctxC = COR.getContext('2d');
+  ctxC.imageSmoothingEnabled = false;
+  ctxC.fillStyle = '#000'; ctxC.fillRect(0, 0, COR.width, COR.height);
+  const atlasTopY = atlasImageTopY();
+  const atlasH    = cor.image_size_px[1] * SCALE;
+  ctxC.drawImage(corImg, 0, atlasTopY, COR.width, atlasH);
+  // curved skull + brain pial outlines for this AP slice
+  drawSurfaceCurves(ctxC, 'coronal', ap, corXFromMl);
+
+  // stereo_ap defaults to the target AP (current slice). For points whose
+  // stereo AP differs (entry of a tilted probe), pass it explicitly so the
+  // CCF→stereo rotation maps the point to its true atlas DV.
+  function corPx(stereo_ml_mm, stereo_dv_mm, stereo_ap_mm = ap) {
+    const x = corXFromMl(stereoMlToCcfMl(stereo_ml_mm));
+    const { dv: atlas_dv } = stereoToCcfApDv(stereo_ap_mm, stereo_dv_mm);
+    return [x, dvSkullMmToCanvasY(atlas_dv)];
+  }
+  // probe line projected on this AP slice : each point passes its own
+  // stereo AP so the CCF→stereo rotation lands it at the right atlas DV.
+  const [ex, ey]     = corPx(traj.refEntry.ml,   traj.refEntry.dv_skull,   traj.refEntry.ap);
+  const [sx_c, sy_c] = corPx(traj.skullEntry.ml, traj.skullEntry.dv_skull, traj.skullEntry.ap);
+  const [tx, ty]     = corPx(traj.target.ml,     traj.target.dv_skull,     traj.target.ap);
+
+  // bregma tick at (ML=0, DV=0)
+  {
+    const [bx, by] = corPx(0, 0);
+    if (bx >= 0 && bx <= COR.width) drawBregmaTick(ctxC, bx, by);
+  }
+
+  // crosshair behind everything
+  ctxC.strokeStyle = 'rgba(255,111,134,0.30)'; ctxC.lineWidth = 1;
+  ctxC.setLineDash([6, 6]);
+  ctxC.beginPath(); ctxC.moveTo(0, ty); ctxC.lineTo(COR.width, ty);
+  ctxC.moveTo(tx, 0); ctxC.lineTo(tx, COR.height); ctxC.stroke();
+  ctxC.setLineDash([]);
+  // probe-width band (translucent) behind the line
+  if (probeHalfPx > 0) drawProbeBand(ctxC, sx_c, sy_c, tx, ty, probeHalfPx);
+  // full physical probe path: skull entry → target. Solid bright core.
+  drawProbe(ctxC, sx_c, sy_c, tx, ty);
+  if (dvRef !== 'skull') drawDrillTick(ctxC, sx_c, sy_c);
+  // primary blue dot at the chosen DV reference surface
+  drawMarker(ctxC, ex, ey, '#7be0ff');
+  drawMarker(ctxC, tx, ty, '#ff6f86');
+  if (!inAtlas) drawWarnRing(ctxC, tx, ty);
+
+  // ----- Sagittal -----
+  const sag = coords.views.sagittal;
+  const sagIdx = Math.max(0, Math.min(sag.n_slices - 1, Math.round(v.k)));
+  const sagImg = await loadImg('sagittal', sagIdx);
+  const ctxS = SAG.getContext('2d');
+  ctxS.imageSmoothingEnabled = false;
+  ctxS.fillStyle = '#000'; ctxS.fillRect(0, 0, SAG.width, SAG.height);
+  const sagAtlasH = sag.image_size_px[1] * SCALE;
+  ctxS.drawImage(sagImg, 0, atlasTopY, SAG.width, sagAtlasH);
+  const W_ap = sag.image_size_px[0];
+  drawSurfaceCurves(ctxS, 'sagittal', ml, (ap_mm) => sagXFromAp(ap_mm, W_ap));
+  drawSagittalApRuler(ctxS, (ap_mm) => sagXFromAp(ap_mm, W_ap));
+
+  function sagPx(stereo_ap_mm, stereo_dv_mm) {
+    const { ap: atlas_ap, dv: atlas_dv } = stereoToCcfApDv(stereo_ap_mm, stereo_dv_mm);
+    const i = (coords.bregma_ccf_um.AP - atlas_ap * 1000) / coords.resolution_um;
+    return [(W_ap - 1 - i) * SCALE, dvSkullMmToCanvasY(atlas_dv)];
+  }
+  const [sex, sey] = sagPx(traj.refEntry.ap,   traj.refEntry.dv_skull);
+  const [ssx, ssy] = sagPx(traj.skullEntry.ap, traj.skullEntry.dv_skull);
+  const [stx, sty] = sagPx(traj.target.ap, traj.target.dv_skull);
+
+  {
+    const [bx, by] = sagPx(0, 0);
+    if (bx >= 0 && bx <= SAG.width) drawBregmaTick(ctxS, bx, by);
+  }
+
+  ctxS.strokeStyle = 'rgba(255,111,134,0.30)'; ctxS.lineWidth = 1;
+  ctxS.setLineDash([6, 6]);
+  ctxS.beginPath(); ctxS.moveTo(0, sty); ctxS.lineTo(SAG.width, sty);
+  ctxS.moveTo(stx, 0); ctxS.lineTo(stx, SAG.height); ctxS.stroke();
+  ctxS.setLineDash([]);
+  if (probeHalfPx > 0) drawProbeBand(ctxS, ssx, ssy, stx, sty, probeHalfPx);
+  drawProbe(ctxS, ssx, ssy, stx, sty);
+  if (dvRef !== 'skull') drawDrillTick(ctxS, ssx, ssy);
+  drawMarker(ctxS, sex, sey, '#7be0ff');
+  drawMarker(ctxS, stx, sty, '#ff6f86');
+  if (!inAtlas) drawWarnRing(ctxS, stx, sty);
+
+  // ----- Readout: rig recipe -----
+  const num = (x, n=2) => `<span class="num">${fmt(x, n)}</span>`;
+  const angled = Math.abs(mlTilt) > 1e-6 || Math.abs(apTilt) > 1e-6;
+
+  const html = [];
+
+  // ----- PROMINENT: Allen region @ target -----
+  let targetRegion = null;
+  if (annotation && structures) {
+    const targetCcf = stereoToCcfUm(ap, ml, target_dv_skull);
+    targetRegion = regionAtCcfUm(targetCcf.ap, targetCcf.dv, targetCcf.ml);
+    if (targetRegion) {
+      html.push(
+        `<div class="region-card">` +
+        `<div class="label-row">Allen region @ target</div>` +
+        `<div class="acronym">${targetRegion.acronym}</div>` +
+        `<div class="name">${targetRegion.name}</div>` +
+        `</div>`
+      );
+    } else {
+      html.push(
+        `<div class="region-card warn">` +
+        `<div class="label-row">Allen region @ target</div>` +
+        `<div class="acronym">outside annotated brain</div>` +
+        `<div class="name">target voxel falls outside the Allen CCFv3 annotation. Either you're past the brain bottom, or the bregma offset / pitch correction needs tuning.</div>` +
+        `</div>`
+      );
+    }
+  }
+
+  // ----- PROMINENT: Target card -----
+  const outOfAtlas = !inAtlas;
+  html.push(
+    `<div class="target-card">` +
+    `<div class="label-row">Target · stereotaxic` +
+    (outOfAtlas ? ` &nbsp;<span style="color:var(--rose);">⚠ outside atlas extent</span>` : ``) +
+    `</div>` +
+    `<div class="coords">AP <b>${fmt(ap)}</b> &nbsp; ML <b>${fmt(ml)}</b> &nbsp; DV <b>${fmt(-target_dv_skull)}</b> mm</div>` +
+    `<div class="meta">depth ${fmt(depth_mm)} mm measured from ${refLabel}</div>` +
+    `</div>`
+  );
+
+  html.push(`<h2>Rig recipe</h2>`);
+  html.push(`<ol>`);
+  html.push(`<li>Zero stereotax over <b>bregma</b> (AP, ML, DV all = 0).</li>`);
+  if (angled) {
+    html.push(`<li>Set arm angles : ML tilt ${num(mlTilt,1)}&deg;, AP tilt ${num(apTilt,1)}&deg;.</li>`);
+  } else {
+    html.push(`<li>Arm vertical (straight-down implant).</li>`);
+  }
+  const refLabelShort = ({bregma:'bregma plane', skull:'local skull', brain:'brain pial'})[dvRef];
+  html.push(
+    `<li>Move probe to the <span style="color:#cfd6e3;">drill / skull entry</span> point:<br>` +
+    `&nbsp;&nbsp;AP ${num(traj.skullEntry.ap)} mm, ML ${num(traj.skullEntry.ml)} mm` +
+    `<span class="secondary">local skull here sits ${num(traj.skullEntry.dv_skull)} mm below bregma plane.</span></li>`
+  );
+  html.push(
+    `<li>Drill the craniotomy at that AP/ML` +
+    (probeWidthOn ? ` : <span class="secondary" style="display:inline; margin:0;">probe width ${probeWidthUm.toFixed(0)} µm, hole ≥ ${(probeWidthUm + 100).toFixed(0)} µm recommended.</span>` : '') +
+    `.</li>`
+  );
+  html.push(
+    `<li>Lower probe until it touches your DV-reference surface : <b>${refLabelShort}</b> : then zero DV there.<br>` +
+    `<span class="secondary">This is the <span class="swatch-entry">blue dot</span> on the canvas.</span></li>`
+  );
+  html.push(
+    `<li>Lower probe by ${num(traj.length_ref_to_target_mm)} mm along the probe axis.<br>` +
+    `<span class="secondary">Vertical (DV) drop = your input ${num(depth_mm)} mm; along-probe length = depth ÷ cos(tilt).</span></li>`
+  );
+  html.push(`</ol>`);
+
+  // ----- COLLAPSIBLES below -----
+
+  // Probe traversal
+  if (annotation && structures) {
+    const samples = 13;
+    const seen = [];
+    let lastAcr = null;
+    for (let s = 0; s < samples; s++) {
+      const t = s / (samples - 1);
+      const ap_s = traj.skullEntry.ap + (traj.target.ap - traj.skullEntry.ap) * t;
+      const ml_s = traj.skullEntry.ml + (traj.target.ml - traj.skullEntry.ml) * t;
+      const dv_s = traj.skullEntry.dv_skull + (traj.target.dv_skull - traj.skullEntry.dv_skull) * t;
+      const ccf  = stereoToCcfUm(ap_s, ml_s, dv_s);
+      const r    = regionAtCcfUm(ccf.ap, ccf.dv, ccf.ml);
+      const acr  = r ? r.acronym : '?';
+      const name = r ? r.name : '(outside annotated brain)';
+      if (acr !== lastAcr) { seen.push({ acr, name, dv: dv_s }); lastAcr = acr; }
+    }
+    html.push(
+      `<details class="subsection"><summary>Probe traversal · ${seen.length} regions</summary>` +
+      `<div class="body">` +
+      seen.map(x =>
+        `<div class="secondary">DV ${fmt(-x.dv)} mm &nbsp;·&nbsp; <b style="color:var(--bone);">${x.acr}</b>` +
+        (x.name && x.name !== x.acr ? ` <span style="color:var(--muted);">${x.name}</span>` : '') +
+        `</div>`
+      ).join('') +
+      `<div class="secondary" style="margin-top:8px;">If these regions don't match what you expect, nudge <b>Bregma offset · AP</b>. +50 µm shifts the picked slice ~50 µm posterior.</div>` +
+      `</div></details>`
+    );
+  }
+
+
+  RO.innerHTML = html.join('\n');
+}
+
+// canvas vertical scale: px per stereotaxic mm
+function pxPerMm() { return SCALE / (coords.resolution_um / 1000); }   // 80
+// stereo DV (mm from skull) → canvas y in pixels.
+// canvas y=0 is at DV_VIS_MIN_MM (1 mm dorsal to skull).
+function dvSkullMmToCanvasY(dv_skull_mm) {
+  return (dv_skull_mm - DV_VIS_MIN_MM) * pxPerMm();
+}
+// stereo AP (mm) → canvas x for a coronal-view image (ML on the x-axis)
+function corXFromMl(stereo_ml_mm) {
+  const k = (coords.bregma_ccf_um.ML + stereo_ml_mm * 1000) / coords.resolution_um;
+  return k * SCALE;
+}
+// stereo AP (mm) → canvas x for a sagittal-view image (AP on x, anterior right)
+function sagXFromAp(stereo_ap_mm, image_w_voxels) {
+  const i = (coords.bregma_ccf_um.AP - stereo_ap_mm * 1000) / coords.resolution_um;
+  return (image_w_voxels - 1 - i) * SCALE;
+}
+// canvas y to draw the top of the atlas image at (atlas voxel j=0 → stereo DV
+// equal to -bregma_DV_um/1000 mm). At Chon = 332 µm this yields canvas_y ≈ 53 px,
+// putting the 332 µm of "skull headroom" visibly above the atlas image.
+function atlasImageTopY() {
+  return dvSkullMmToCanvasY(-coords.bregma_ccf_um.DV / 1000);
+}
+
+// Walks along the cross-axis of a view at fixed slice and yields callback(other_mm,
+// brain_pial_dv_mm) for each downsampled voxel that has tissue. plane = 'coronal'
+// fixes AP and walks ML; plane = 'sagittal' fixes ML and walks AP.
+function walkPialColumn(plane, fixed_mm, cb) {
+  const r = coords.resolution_um;
+  const step = surface.step_voxels;
+  const [nAP, nML] = surface.shape_ap_ml;
+  if (plane === 'coronal') {
+    const i = Math.round((coords.bregma_ccf_um.AP - fixed_mm * 1000) / r);
+    const ds_i = Math.floor(i / step);
+    if (ds_i < 0 || ds_i >= nAP) return;
+    for (let ds_k = 0; ds_k < nML; ds_k++) {
+      const j = surface.data[ds_i][ds_k];
+      if (j < 0) { cb(null); continue; }
+      const ml_mm = ((ds_k * step) * r - coords.bregma_ccf_um.ML) / 1000;
+      const pial_dv = (j * r - coords.bregma_ccf_um.DV) / 1000;
+      cb(ml_mm, pial_dv);
+    }
+  } else {
+    const k = Math.round((coords.bregma_ccf_um.ML + fixed_mm * 1000) / r);
+    const ds_k = Math.floor(k / step);
+    if (ds_k < 0 || ds_k >= nML) return;
+    for (let ds_i = 0; ds_i < nAP; ds_i++) {
+      const j = surface.data[ds_i][ds_k];
+      if (j < 0) { cb(null); continue; }
+      const ap_mm = (coords.bregma_ccf_um.AP - (ds_i * step) * r) / 1000;
+      const pial_dv = (j * r - coords.bregma_ccf_um.DV) / 1000;
+      cb(ap_mm, pial_dv);
+    }
+  }
+}
+
+// Curved skull and brain-pial outlines for a given view + slice.
+function drawSurfaceCurves(ctx, plane, fixed_mm, xMapper) {
+  // Collect raw (other_mm, pial_dv) pairs, then smooth with a rolling-min
+  // over a ~0.3 mm window so the longitudinal fissure dip at midline gets
+  // filled into a continuous outer brain envelope (the annotation's topmost
+  // voxel dips down at ML≈0 because of the interhemispheric fissure).
+  const raw = [];
+  walkPialColumn(plane, fixed_mm, (other_mm, pial_dv) => {
+    raw.push(other_mm == null ? null : { other_mm, pial_dv });
+  });
+  const halfWin = 3;  // ±3 downsampled voxels ≈ ±0.3 mm
+  const skullPts = [];
+  const pialPts  = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] == null) continue;
+    let mDv = raw[i].pial_dv;
+    for (let k = Math.max(0, i-halfWin); k <= Math.min(raw.length-1, i+halfWin); k++) {
+      if (raw[k] != null && raw[k].pial_dv < mDv) mDv = raw[k].pial_dv;
+    }
+    const x = xMapper(raw[i].other_mm);
+    pialPts.push([x, dvSkullMmToCanvasY(mDv)]);
+    skullPts.push([x, dvSkullMmToCanvasY(mDv - SKULL_THICKNESS_MM)]);
+  }
+
+  // Stereotaxic bregma plane (DV_stereo = 0). After applying the CCFv3
+  // pitch correction, this is *not* parallel to the atlas : it tilts
+  // across AP. On a coronal slice (fixed AP) it's still horizontal but
+  // sits at atlas_dv = -slice_ap · tan(pitch). On sagittal it's drawn
+  // as a tilted line spanning the full AP range.
+  const tilt = CCF_PITCH_DEG * Math.PI / 180;
+  if (plane === 'coronal') {
+    const atlas_dv_at_zero_stereo = -fixed_mm * Math.tan(tilt);
+    drawHRefLine(ctx, dvSkullMmToCanvasY(atlas_dv_at_zero_stereo),
+                 'rgba(255,186,92,0.35)',
+                 `bregma plane (stereo DV = 0)  ·  CCF tilted ${CCF_PITCH_DEG.toFixed(1)}°, scales ${CCF_AP_SCALE}/${CCF_ML_SCALE}/${CCF_DV_SCALE}`,
+                 { dash: [6, 4] });
+  } else {
+    // sagittal: tilted line; draw two endpoints at atlas AP extremes
+    const r = coords.resolution_um;
+    const apMaxMm = (coords.bregma_ccf_um.AP) / 1000;            // most-anterior (i=0)
+    const apMinMm = (coords.bregma_ccf_um.AP - (coords.shape.AP - 1) * r) / 1000;
+    const xL = xMapper(apMaxMm), xR = xMapper(apMinMm);
+    const yL = dvSkullMmToCanvasY(-apMaxMm * Math.tan(tilt));
+    const yR = dvSkullMmToCanvasY(-apMinMm * Math.tan(tilt));
+    ctx.strokeStyle = 'rgba(255,186,92,0.35)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.moveTo(xL, yL); ctx.lineTo(xR, yR); ctx.stroke();
+    ctx.setLineDash([]);
+    // tiny tag near right edge
+    ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
+    ctx.fillStyle = 'rgba(255,186,92,0.7)';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`bregma plane (stereo DV=0) · pitch ${CCF_PITCH_DEG.toFixed(1)}°`,
+                 Math.min(xL, xR) + 12, Math.min(yL, yR) - 10);
+  }
+
+  // brain pial : cyan, faint
+  if (pialPts.length > 1) {
+    ctx.strokeStyle = 'rgba(123,224,255,0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(pialPts[0][0], pialPts[0][1]);
+    for (let i = 1; i < pialPts.length; i++) ctx.lineTo(pialPts[i][0], pialPts[i][1]);
+    ctx.stroke();
+  }
+
+  // outer skull curve : solid amber
+  if (skullPts.length > 1) {
+    ctx.strokeStyle = '#ffba5c';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(skullPts[0][0], skullPts[0][1]);
+    for (let i = 1; i < skullPts.length; i++) ctx.lineTo(skullPts[i][0], skullPts[i][1]);
+    ctx.stroke();
+    // label on the right
+    const last = skullPts[skullPts.length - 1];
+    ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
+    const tag = `skull (pial − ${Math.round(SKULL_THICKNESS_MM*1000)} µm)`;
+    const tw = ctx.measureText(tag).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.78)';
+    ctx.fillRect(last[0] - tw - 18, last[1] - 8, tw + 12, 16);
+    ctx.fillStyle = '#ffba5c';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(tag, last[0] - tw - 12, last[1]);
+  }
+}
+
+function drawHRefLine(ctx, y, color, label, opts = {}) {
+  const w = ctx.canvas.width;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = opts.thick ? 1.5 : 1;
+  ctx.setLineDash(opts.dash || [4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(0, y); ctx.lineTo(w, y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  if (label) {
+    ctx.font = '600 11px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(label).width;
+    const padX = 6, padY = 3;
+    const tx = 8, ty = y;
+    ctx.fillStyle = 'rgba(0,0,0,0.78)';
+    ctx.fillRect(tx - padX, ty - 8, tw + padX*2, 16);
+    ctx.fillStyle = color;
+    ctx.fillText(label, tx, ty);
+  }
+}
+
+function drawColumnExtent(ctx, x, yTop, yBot, color) {
+  // small bracket at x indicating brain top/bottom at the target column
+  const arm = 22;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  // top tick
+  ctx.moveTo(x - arm, yTop); ctx.lineTo(x + arm, yTop);
+  // bottom tick
+  ctx.moveTo(x - arm, yBot); ctx.lineTo(x + arm, yBot);
+  // connecting line on the right side
+  ctx.moveTo(x + arm, yTop); ctx.lineTo(x + arm, yBot);
+  ctx.stroke();
+  ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.fillText('brain top', x + arm + 6, yTop);
+  ctx.fillText('brain bot', x + arm + 6, yBot);
+}
+
+// Tick ruler showing stereotaxic AP along the top edge of the sagittal canvas.
+// Uses the same xMapper convention (anterior on the right).
+function drawSagittalApRuler(ctx, xMapper) {
+  const w = ctx.canvas.width;
+  // span of stereo AP visible on the canvas: derived from atlas AP extent
+  const r = coords.resolution_um;
+  const apMaxMm = (coords.bregma_ccf_um.AP) / 1000;
+  const apMinMm = (coords.bregma_ccf_um.AP - (coords.shape.AP - 1) * r) / 1000;
+  const apLow  = Math.ceil(Math.min(apMaxMm, apMinMm));
+  const apHigh = Math.floor(Math.max(apMaxMm, apMinMm));
+  // baseline bar
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(0, 0, w, 22);
+  ctx.strokeStyle = 'rgba(255,186,92,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, 22); ctx.lineTo(w, 22); ctx.stroke();
+  // ticks at every integer mm + bregma highlight
+  ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'center';
+  for (let ap = apLow; ap <= apHigh; ap++) {
+    const x = xMapper(ap);
+    if (x < 4 || x > w - 4) continue;
+    const isBregma = ap === 0;
+    ctx.strokeStyle = isBregma ? '#ffba5c' : 'rgba(255,186,92,0.6)';
+    ctx.lineWidth = isBregma ? 2 : 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 14); ctx.lineTo(x, 22); ctx.stroke();
+    ctx.fillStyle = isBregma ? '#ffd28a' : 'rgba(236,233,224,0.85)';
+    const lbl = isBregma ? 'bregma · 0' : (ap > 0 ? '+' + ap : '' + ap);
+    ctx.fillText(lbl, x, 2);
+  }
+  ctx.textAlign = 'start';
+}
+
+function drawBregmaTick(ctx, x, y) {
+  ctx.strokeStyle = '#ffba5c';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([]);
+  const r = 7;
+  ctx.beginPath();
+  ctx.moveTo(x - r, y); ctx.lineTo(x + r, y);
+  ctx.moveTo(x, y - r); ctx.lineTo(x, y + r);
+  ctx.stroke();
+  ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  const tw = ctx.measureText('bregma').width;
+  ctx.fillRect(x + 10 - 4, y - 8, tw + 8, 16);
+  ctx.fillStyle = '#ffba5c';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('bregma', x + 10, y);
+}
+
+// Translucent band around the probe line representing the probe diameter.
+// Drawn behind drawProbe(); the line stays as the bright core down the
+// middle of the band.
+function drawProbeBand(ctx, x1, y1, x2, y2, halfWidthPx) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-3) return;
+  // unit perpendicular in canvas px
+  const nx = -dy / len, ny = dx / len;
+  const ox = nx * halfWidthPx, oy = ny * halfWidthPx;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 186, 92, 0.18)';
+  ctx.strokeStyle = 'rgba(255, 186, 92, 0.55)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x1 + ox, y1 + oy);
+  ctx.lineTo(x2 + ox, y2 + oy);
+  ctx.lineTo(x2 - ox, y2 - oy);
+  ctx.lineTo(x1 - ox, y1 - oy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawProbe(ctx, x1, y1, x2, y2) {
+  // dark outline so the line reads clearly over bright atlas regions
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  // bright tungsten core
+  ctx.strokeStyle = '#ffba5c';
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  // thin specular highlight
+  ctx.strokeStyle = 'rgba(255, 232, 188, 0.85)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.lineCap = 'butt';
+}
+
+// Small open ring + crosshair marking the actual skull entry (drill location).
+// Used when the chosen DV reference is not the skull, so the user can still
+// see where the craniotomy goes.
+function drawDrillTick(ctx, x, y) {
+  ctx.setLineDash([]);
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = '#cfd6e3';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - 11, y); ctx.lineTo(x - 4, y);
+  ctx.moveTo(x + 4, y);  ctx.lineTo(x + 11, y);
+  ctx.moveTo(x, y - 11); ctx.lineTo(x, y - 4);
+  ctx.moveTo(x, y + 4);  ctx.lineTo(x, y + 11);
+  ctx.stroke();
+  ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
+  const tag = 'drill';
+  const tw = ctx.measureText(tag).width;
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  ctx.fillRect(x + 14, y - 8, tw + 8, 16);
+  ctx.fillStyle = '#cfd6e3';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(tag, x + 18, y);
+}
+
+function drawWarnRing(ctx, x, y) {
+  // bright red double ring around the target when it's outside the atlas brain
+  ctx.setLineDash([]);
+  ctx.strokeStyle = '#ff3b5b';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,59,91,0.45)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(x, y, 22, 0, Math.PI*2); ctx.stroke();
+}
+
+function drawMarker(ctx, x, y, color) {
+  // outer dark ring → colored body → inner white dot (target reticle vibe)
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, y, 6.5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.beginPath(); ctx.arc(x, y, 1.8, 0, Math.PI*2); ctx.fill();
+}
+
+init().catch(e => { RO.textContent = 'init error: ' + e.message; });
+</script>
+</body>
+</html>
