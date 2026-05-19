@@ -294,6 +294,61 @@
     gap: 6px;
   }
 
+  /* iOS-style toggle: orange accent when on. Use on .toggle-row to align
+     [label]…[number? µm?]…[switch] on a single line. */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-row > .label {
+    flex: 1;
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--bone);
+  }
+  .toggle-row > input[type=number] { width: 90px; }
+  .toggle-row > .unit {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .toggle {
+    position: relative;
+    width: 38px;
+    height: 20px;
+    flex: 0 0 auto;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--rule);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 140ms ease;
+    margin: 0;
+  }
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: var(--bone-dim);
+    border-radius: 50%;
+    transition: transform 140ms ease, background 140ms ease;
+  }
+  .toggle:checked { background: var(--tungsten-glow); }
+  .toggle:checked::after {
+    transform: translateX(18px);
+    background: var(--tungsten);
+  }
+  .toggle:focus-visible { outline: 1px solid var(--tungsten); outline-offset: 2px; }
+
   details.help {
     margin-top: 18px;
     padding: 12px 14px;
@@ -429,6 +484,34 @@
     max-width: 100%;
     border: 1px solid var(--rule-soft);
   }
+
+  .hover-tooltip {
+    position: absolute;
+    pointer-events: none;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--tungsten-2);
+    background: rgba(8, 10, 14, 0.92);
+    border: 1px solid rgba(255, 186, 92, 0.55);
+    padding: 6px 9px;
+    max-width: 260px;
+    opacity: 0;
+    transition: opacity 80ms ease;
+    z-index: 10;
+    white-space: normal;
+  }
+  .hover-tooltip .acr {
+    color: var(--tungsten);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .hover-tooltip .nm {
+    color: var(--bone);
+    display: block;
+    margin-top: 2px;
+  }
+  .hover-tooltip.visible { opacity: 1; }
 
   .scale-row {
     display: flex; justify-content: space-between;
@@ -906,13 +989,16 @@
 
     <div class="group-head">Probe geometry</div>
 
-    <div class="field wide" style="display:flex; align-items:center; gap:10px;">
-      <label style="margin: 0; flex: 1;">
-        <input type="checkbox" id="probeWidthOn" style="vertical-align: middle; margin-right: 6px;">
-        Custom probe width
-      </label>
-      <input id="probeWidthUm" type="number" step="50" value="400" style="width: 90px;">
-      <span class="hint" style="margin: 0;">µm</span>
+    <div class="toggle-row">
+      <span class="label">Custom probe width</span>
+      <input id="probeWidthUm" type="number" step="50" value="400">
+      <span class="unit">µm</span>
+      <input type="checkbox" class="toggle" id="probeWidthOn">
+    </div>
+
+    <div class="toggle-row">
+      <span class="label">Show Allen region outlines</span>
+      <input type="checkbox" class="toggle" id="regionOutlinesOn">
     </div>
 
     <details class="help">
@@ -956,6 +1042,7 @@
         <div class="canvas-frame">
           <span class="tick-tl"></span><span class="tick-br"></span>
           <canvas id="coronal" width="912" height="640"></canvas>
+          <div class="hover-tooltip" id="hoverTooltipCor"></div>
         </div>
         <div class="scale-row">
           <span>− ML &nbsp; left</span>
@@ -971,6 +1058,7 @@
         <div class="canvas-frame">
           <span class="tick-tl"></span><span class="tick-br"></span>
           <canvas id="sagittal" width="1056" height="640"></canvas>
+          <div class="hover-tooltip" id="hoverTooltipSag"></div>
         </div>
         <div class="scale-row">
           <span>− AP &nbsp; posterior</span>
@@ -1080,7 +1168,7 @@
 </a>
 
 <script>
-const SCALE = 4;   // canvas zoom (px per atlas voxel along x)
+const SCALE = 2;   // canvas zoom (px per atlas voxel along x)
 // Vertical range shown on each canvas, in stereotaxic mm from skull.
 // Negative values are dorsal to the bregma plane (skull / above-skull headroom).
 // Atlas image starts at stereo DV = -bregma_offset (≈ -0.332 mm) so its top voxel
@@ -1156,10 +1244,18 @@ const RO  = document.getElementById('readout');
 
 let coords = null;
 let surface = null; // {step_voxels, data: [[..], ..], shape_ap_ml: [nAP, nML]}
-let annotation = null;   // Uint32Array of region IDs at 100 µm
-let annotationShape = null; // [nAP, nDV, nML] at 100 µm
+let annotation = null;   // Uint32Array of region IDs at annotationResUm
+let annotationShape = null; // [nAP, nDV, nML]
+let annotationResUm = 100;  // µm per annotation voxel (set from coords)
 let structures = null;   // { id: { acronym, name } }
 const imgCache = new Map();
+
+// Hover state. Updated by canvas mousemove; consumed by render() to draw the
+// region-highlight overlay. Only active when the region outlines toggle is on.
+let hover = { view: null, regionId: 0 };
+// Snapshot of the current slice geometry, set inside render() so the hover
+// handler can map canvas pixels → atlas voxels without re-running the math.
+let viewState = { corIdx: 0, sagIdx: 0, atlasTopY: 0, W_apVoxels: 0 };
 
 function loadImg(view, idx) {
   const key = `${view}/${idx}`;
@@ -1174,17 +1270,81 @@ function loadImg(view, idx) {
   return p;
 }
 
+// Wire mousemove/leave on a canvas so the user can hover regions when outlines
+// are on. Updates the tooltip every move (so it follows the cursor) but only
+// triggers a render() when the hovered region ID actually changes.
+function bindHover(view, canvas, tooltipEl) {
+  function annAtPixel(cx, cy) {
+    if (!annotation || !annotationShape || !coords) return 0;
+    const annStep = annotationResUm / coords.resolution_um;
+    const [nAP, nDV, nML] = annotationShape;
+    const j = Math.floor((cy - viewState.atlasTopY) / SCALE / annStep);
+    if (j < 0 || j >= nDV) return 0;
+    let ann_i, ann_j = j, ann_k;
+    if (view === 'coronal') {
+      ann_i = Math.floor(viewState.corIdx / annStep);
+      ann_k = Math.floor((cx / SCALE) / annStep);
+    } else {
+      const W = viewState.W_apVoxels;
+      const i_atlas = (W - 1) - cx / SCALE;
+      ann_i = Math.floor(i_atlas / annStep);
+      ann_k = Math.floor(viewState.sagIdx / annStep);
+    }
+    if (ann_i < 0 || ann_i >= nAP || ann_k < 0 || ann_k >= nML) return 0;
+    return annotation[ann_i * nDV * nML + ann_j * nML + ann_k] || 0;
+  }
+
+  canvas.addEventListener('mousemove', (ev) => {
+    if (!document.getElementById('regionOutlinesOn').checked) {
+      tooltipEl.classList.remove('visible');
+      if (hover.regionId !== 0) { hover = { view: null, regionId: 0 }; render(); }
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const cx = (ev.clientX - rect.left) * scaleX;
+    const cy = (ev.clientY - rect.top)  * scaleY;
+    const id = annAtPixel(cx, cy);
+    if (id && structures && structures[id]) {
+      const s = structures[id];
+      tooltipEl.innerHTML = `<span class="acr">${s.acronym}</span><span class="nm">${s.name}</span>`;
+      // position relative to the canvas-frame (tooltip's offset parent)
+      const fx = ev.clientX - rect.left + 22;
+      const fy = ev.clientY - rect.top + 26;
+      tooltipEl.style.left = fx + 'px';
+      tooltipEl.style.top  = fy + 'px';
+      tooltipEl.classList.add('visible');
+    } else {
+      tooltipEl.classList.remove('visible');
+    }
+    if (id !== hover.regionId || view !== hover.view) {
+      hover = { view, regionId: id };
+      render();
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    tooltipEl.classList.remove('visible');
+    if (hover.regionId !== 0 || hover.view !== null) {
+      hover = { view: null, regionId: 0 };
+      render();
+    }
+  });
+}
+
 async function init() {
   const c = await fetch('atlas/coords.json').then(r => r.json());
   coords = c;
   const s = await fetch('atlas/brain_surface_dv_idx.json').then(r => r.json());
   surface = s;
   // region annotation + structure dict
-  const annInfo = coords.annotation_100um;
+  const annInfo = coords.annotation || coords.annotation_100um;
   if (annInfo) {
     const buf = await fetch('atlas/' + annInfo.file).then(r => r.arrayBuffer());
     annotation = new Uint32Array(buf);
     annotationShape = annInfo.shape;
+    annotationResUm = annInfo.resolution_um || 100;
     structures = await fetch('atlas/structures.json').then(r => r.json());
   }
   // initialize bregma override inputs: prefer localStorage > coords default
@@ -1206,10 +1366,12 @@ async function init() {
   COR.height = canvasH;
   SAG.width  = coords.views.sagittal.image_size_px[0] * SCALE;
   SAG.height = canvasH;
-  for (const id of ['ap','ml','dv','mlTilt','apTilt','dvRef','probeWidthOn','probeWidthUm','bregmaAP','bregmaML','bregmaDV']) {
+  for (const id of ['ap','ml','dv','mlTilt','apTilt','dvRef','probeWidthOn','probeWidthUm','regionOutlinesOn','bregmaAP','bregmaML','bregmaDV']) {
     document.getElementById(id).addEventListener('input', render);
     document.getElementById(id).addEventListener('change', render);
   }
+  bindHover('coronal', COR, document.getElementById('hoverTooltipCor'));
+  bindHover('sagittal', SAG, document.getElementById('hoverTooltipSag'));
   // tab switching
   for (const btn of document.querySelectorAll('.tab')) {
     btn.addEventListener('click', () => {
@@ -1331,10 +1493,10 @@ function fmt(x, n=2) { return (x>=0?'+':'') + x.toFixed(n); }
 // { id, acronym, name } or null if outside the volume / unannotated.
 function regionAtCcfUm(ap_um, dv_um, ml_um) {
   if (!annotation || !annotationShape) return null;
-  // 100 µm voxel index
-  const i = Math.round(ap_um / 100);
-  const j = Math.round(dv_um / 100);
-  const k = Math.round(ml_um / 100);
+  const r = annotationResUm;
+  const i = Math.round(ap_um / r);
+  const j = Math.round(dv_um / r);
+  const k = Math.round(ml_um / r);
   const [nAP, nDV, nML] = annotationShape;
   if (i < 0 || i >= nAP || j < 0 || j >= nDV || k < 0 || k >= nML) return null;
   const id = annotation[i * nDV * nML + j * nML + k];
@@ -1357,6 +1519,8 @@ async function render() {
   const apTilt = parseFloat(document.getElementById('apTilt').value);
   const probeWidthOn = document.getElementById('probeWidthOn').checked;
   const probeWidthUm = Math.max(0, parseFloat(document.getElementById('probeWidthUm').value) || 0);
+  const showOutlines = document.getElementById('regionOutlinesOn').checked;
+  const annStep = annotationResUm / coords.resolution_um;
   // half-width in canvas px (DV axis at 1 mm = pxPerMm). Same scale on x and y
   // because the canvas is isotropic in mm-per-px after our SCALE.
   const probeHalfPx = probeWidthOn ? (probeWidthUm / 1000) * pxPerMm() / 2 : 0;
@@ -1412,6 +1576,12 @@ async function render() {
   const atlasTopY = atlasImageTopY();
   const atlasH    = cor.image_size_px[1] * SCALE;
   ctxC.drawImage(corImg, 0, atlasTopY, COR.width, atlasH);
+  if (showOutlines) {
+    drawRegionOutlines(ctxC, 'coronal', Math.floor(corIdx / annStep));
+    if (hover.view === 'coronal' && hover.regionId) {
+      drawRegionHighlight(ctxC, 'coronal', Math.floor(corIdx / annStep), hover.regionId);
+    }
+  }
   // curved skull + brain pial outlines for this AP slice
   drawSurfaceCurves(ctxC, 'coronal', ap, corXFromMl);
 
@@ -1429,10 +1599,15 @@ async function render() {
   const [sx_c, sy_c] = corPx(traj.skullEntry.ml, traj.skullEntry.dv_skull, traj.skullEntry.ap);
   const [tx, ty]     = corPx(traj.target.ml,     traj.target.dv_skull,     traj.target.ap);
 
-  // bregma tick at (ML=0, DV=0)
+  // bregma cross: only on the actual bregma slice (AP ≈ 0), anchored on the
+  // skull surface at ML = 0. Off-slice, the cross would be misleading because
+  // bregma is a skull landmark at (0,0,0), not a free point in the bregma plane.
   {
-    const [bx, by] = corPx(0, 0);
-    if (bx >= 0 && bx <= COR.width) drawBregmaTick(ctxC, bx, by);
+    const slice_ap_halfwidth_mm = coords.resolution_um / 2 / 1000;
+    if (Math.abs(ap) <= slice_ap_halfwidth_mm) {
+      const [bx, by] = corPx(0, 0);
+      if (bx >= 0 && bx <= COR.width) drawBregmaTick(ctxC, bx, by);
+    }
   }
 
   // crosshair behind everything
@@ -1460,7 +1635,18 @@ async function render() {
   ctxS.fillStyle = '#000'; ctxS.fillRect(0, 0, SAG.width, SAG.height);
   const sagAtlasH = sag.image_size_px[1] * SCALE;
   ctxS.drawImage(sagImg, 0, atlasTopY, SAG.width, sagAtlasH);
+  if (showOutlines) {
+    drawRegionOutlines(ctxS, 'sagittal', Math.floor(sagIdx / annStep));
+    if (hover.view === 'sagittal' && hover.regionId) {
+      drawRegionHighlight(ctxS, 'sagittal', Math.floor(sagIdx / annStep), hover.regionId);
+    }
+  }
   const W_ap = sag.image_size_px[0];
+  // Snapshot slice geometry for the hover handler.
+  viewState.corIdx = corIdx;
+  viewState.sagIdx = sagIdx;
+  viewState.atlasTopY = atlasTopY;
+  viewState.W_apVoxels = W_ap;
   drawSurfaceCurves(ctxS, 'sagittal', ml, (ap_mm) => sagXFromAp(ap_mm, W_ap));
   drawSagittalApRuler(ctxS, (ap_mm) => sagXFromAp(ap_mm, W_ap));
 
@@ -1473,9 +1659,13 @@ async function render() {
   const [ssx, ssy] = sagPx(traj.skullEntry.ap, traj.skullEntry.dv_skull);
   const [stx, sty] = sagPx(traj.target.ap, traj.target.dv_skull);
 
+  // bregma cross on sagittal: only on the ML ≈ 0 slice, anchored on skull at AP = 0.
   {
-    const [bx, by] = sagPx(0, 0);
-    if (bx >= 0 && bx <= SAG.width) drawBregmaTick(ctxS, bx, by);
+    const slice_ml_halfwidth_mm = coords.resolution_um / 2 / 1000;
+    if (Math.abs(ml) <= slice_ml_halfwidth_mm) {
+      const [bx, by] = sagPx(0, 0);
+      if (bx >= 0 && bx <= SAG.width) drawBregmaTick(ctxS, bx, by);
+    }
   }
 
   ctxS.strokeStyle = 'rgba(255,111,134,0.30)'; ctxS.lineWidth = 1;
@@ -1662,7 +1852,14 @@ function drawSurfaceCurves(ctx, plane, fixed_mm, xMapper) {
   walkPialColumn(plane, fixed_mm, (other_mm, pial_dv) => {
     raw.push(other_mm == null ? null : { other_mm, pial_dv });
   });
-  const halfWin = 3;  // ±3 downsampled voxels ≈ ±0.3 mm
+  // Window the rolling-min by a fixed physical span (µm) so the longitudinal
+  // fissure dip at midline gets bridged regardless of sampling resolution.
+  // Real mouse skull doesn't invaginate at the midline; the CCF dips down at
+  // ML≈0 because the topmost-annotated voxel follows the interhemispheric
+  // fissure, which is anatomy below dura/skull, not the skull itself.
+  const SKULL_BRIDGE_UM = 350;
+  const sampleUm = (surface.step_voxels || 2) * coords.resolution_um;
+  const halfWin = Math.max(1, Math.round(SKULL_BRIDGE_UM / sampleUm));
   const skullPts = [];
   const pialPts  = [];
   for (let i = 0; i < raw.length; i++) {
@@ -1685,13 +1882,11 @@ function drawSurfaceCurves(ctx, plane, fixed_mm, xMapper) {
   if (plane === 'coronal') {
     const atlas_dv_at_zero_stereo = -fixed_mm * Math.tan(tilt);
     drawHRefLine(ctx, dvSkullMmToCanvasY(atlas_dv_at_zero_stereo),
-                 'rgba(255,186,92,0.35)',
-                 `bregma plane (stereo DV = 0)  ·  CCF tilted ${CCF_PITCH_DEG.toFixed(1)}°, scales ${CCF_AP_SCALE}/${CCF_ML_SCALE}/${CCF_DV_SCALE}`,
-                 { dash: [6, 4] });
+                 'rgba(255,186,92,0.35)', null, { dash: [6, 4] });
   } else {
     // sagittal: tilted line; draw two endpoints at atlas AP extremes
     const r = coords.resolution_um;
-    const apMaxMm = (coords.bregma_ccf_um.AP) / 1000;            // most-anterior (i=0)
+    const apMaxMm = (coords.bregma_ccf_um.AP) / 1000;
     const apMinMm = (coords.bregma_ccf_um.AP - (coords.shape.AP - 1) * r) / 1000;
     const xL = xMapper(apMaxMm), xR = xMapper(apMinMm);
     const yL = dvSkullMmToCanvasY(-apMaxMm * Math.tan(tilt));
@@ -1701,12 +1896,6 @@ function drawSurfaceCurves(ctx, plane, fixed_mm, xMapper) {
     ctx.setLineDash([6, 4]);
     ctx.beginPath(); ctx.moveTo(xL, yL); ctx.lineTo(xR, yR); ctx.stroke();
     ctx.setLineDash([]);
-    // tiny tag near right edge
-    ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
-    ctx.fillStyle = 'rgba(255,186,92,0.7)';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`bregma plane (stereo DV=0) · pitch ${CCF_PITCH_DEG.toFixed(1)}°`,
-                 Math.min(xL, xR) + 12, Math.min(yL, yR) - 10);
   }
 
   // brain pial : cyan, faint
@@ -1729,16 +1918,6 @@ function drawSurfaceCurves(ctx, plane, fixed_mm, xMapper) {
     ctx.moveTo(skullPts[0][0], skullPts[0][1]);
     for (let i = 1; i < skullPts.length; i++) ctx.lineTo(skullPts[i][0], skullPts[i][1]);
     ctx.stroke();
-    // label on the right
-    const last = skullPts[skullPts.length - 1];
-    ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
-    const tag = `skull (pial − ${Math.round(SKULL_THICKNESS_MM*1000)} µm)`;
-    const tw = ctx.measureText(tag).width;
-    ctx.fillStyle = 'rgba(0,0,0,0.78)';
-    ctx.fillRect(last[0] - tw - 18, last[1] - 8, tw + 12, 16);
-    ctx.fillStyle = '#ffba5c';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(tag, last[0] - tw - 12, last[1]);
   }
 }
 
@@ -1836,6 +2015,129 @@ function drawBregmaTick(ctx, x, y) {
   ctx.fillStyle = '#ffba5c';
   ctx.textBaseline = 'middle';
   ctx.fillText('bregma', x + 10, y);
+}
+
+// Draw Allen region boundaries for the current slice as a thin overlay.
+// `view` is 'coronal' or 'sagittal'. `annIdx` is the index along the fixed
+// axis in the annotation volume (50 µm voxels for the current build).
+function drawRegionOutlines(ctx, view, annIdx) {
+  if (!annotation || !annotationShape) return;
+  const [nAP, nDV, nML] = annotationShape;
+  const pxPerAnn = (annotationResUm / coords.resolution_um) * SCALE;
+  const top = atlasImageTopY();
+  ctx.save();
+  ctx.strokeStyle = 'rgba(12, 14, 18, 0.78)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+
+  if (view === 'coronal') {
+    if (annIdx < 0 || annIdx >= nAP) { ctx.restore(); return; }
+    const base = annIdx * nDV * nML;
+    for (let j = 0; j < nDV; j++) {
+      const rowOff = base + j * nML;
+      const rowOffDown = base + (j + 1) * nML;
+      for (let k = 0; k < nML; k++) {
+        const id = annotation[rowOff + k];
+        if (k + 1 < nML && annotation[rowOff + k + 1] !== id) {
+          const x = (k + 1) * pxPerAnn;
+          const y0 = top + j * pxPerAnn;
+          ctx.moveTo(x, y0); ctx.lineTo(x, y0 + pxPerAnn);
+        }
+        if (j + 1 < nDV && annotation[rowOffDown + k] !== id) {
+          const x0 = k * pxPerAnn;
+          const y = top + (j + 1) * pxPerAnn;
+          ctx.moveTo(x0, y); ctx.lineTo(x0 + pxPerAnn, y);
+        }
+      }
+    }
+  } else if (view === 'sagittal') {
+    if (annIdx < 0 || annIdx >= nML) { ctx.restore(); return; }
+    // Sagittal PNG was built as ref[:, :, k].T then fliplr, so anterior is on
+    // the right: voxel i in the source maps to canvas_x = (nAP - 1 - i) * p.
+    const stride_i = nDV * nML;
+    for (let i = 0; i < nAP; i++) {
+      const off_i = i * stride_i + annIdx;
+      const off_iA = (i + 1) * stride_i + annIdx;
+      for (let j = 0; j < nDV; j++) {
+        const id = annotation[off_i + j * nML];
+        if (i + 1 < nAP && annotation[off_iA + j * nML] !== id) {
+          // Shared edge between voxel i and i+1 in source coords sits at
+          // canvas_x = (nAP - 1 - i) * p after the LR flip.
+          const x = (nAP - 1 - i) * pxPerAnn;
+          const y0 = top + j * pxPerAnn;
+          ctx.moveTo(x, y0); ctx.lineTo(x, y0 + pxPerAnn);
+        }
+        if (j + 1 < nDV && annotation[off_i + (j + 1) * nML] !== id) {
+          const x0 = (nAP - 1 - i) * pxPerAnn;
+          const y = top + (j + 1) * pxPerAnn;
+          ctx.moveTo(x0, y); ctx.lineTo(x0 + pxPerAnn, y);
+        }
+      }
+    }
+  }
+
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Re-stroke just the boundary of a single region (by annotation ID) in
+// tungsten so the hovered structure pops over the dark-gray outline grid.
+function drawRegionHighlight(ctx, view, annIdx, regionId) {
+  if (!annotation || !annotationShape || !regionId) return;
+  const [nAP, nDV, nML] = annotationShape;
+  const pxPerAnn = (annotationResUm / coords.resolution_um) * SCALE;
+  const top = atlasImageTopY();
+  ctx.save();
+  ctx.strokeStyle = '#ffba5c';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+
+  if (view === 'coronal') {
+    if (annIdx < 0 || annIdx >= nAP) { ctx.restore(); return; }
+    const base = annIdx * nDV * nML;
+    for (let j = 0; j < nDV; j++) {
+      const rowOff = base + j * nML;
+      const rowOffDown = base + (j + 1) * nML;
+      for (let k = 0; k < nML; k++) {
+        const id = annotation[rowOff + k];
+        const isThis = id === regionId;
+        if (k + 1 < nML && isThis !== (annotation[rowOff + k + 1] === regionId)) {
+          const x = (k + 1) * pxPerAnn;
+          const y0 = top + j * pxPerAnn;
+          ctx.moveTo(x, y0); ctx.lineTo(x, y0 + pxPerAnn);
+        }
+        if (j + 1 < nDV && isThis !== (annotation[rowOffDown + k] === regionId)) {
+          const x0 = k * pxPerAnn;
+          const y = top + (j + 1) * pxPerAnn;
+          ctx.moveTo(x0, y); ctx.lineTo(x0 + pxPerAnn, y);
+        }
+      }
+    }
+  } else if (view === 'sagittal') {
+    if (annIdx < 0 || annIdx >= nML) { ctx.restore(); return; }
+    const stride_i = nDV * nML;
+    for (let i = 0; i < nAP; i++) {
+      const off_i = i * stride_i + annIdx;
+      const off_iA = (i + 1) * stride_i + annIdx;
+      for (let j = 0; j < nDV; j++) {
+        const id = annotation[off_i + j * nML];
+        const isThis = id === regionId;
+        if (i + 1 < nAP && isThis !== (annotation[off_iA + j * nML] === regionId)) {
+          const x = (nAP - 1 - i) * pxPerAnn;
+          const y0 = top + j * pxPerAnn;
+          ctx.moveTo(x, y0); ctx.lineTo(x, y0 + pxPerAnn);
+        }
+        if (j + 1 < nDV && isThis !== (annotation[off_i + (j + 1) * nML] === regionId)) {
+          const x0 = (nAP - 1 - i) * pxPerAnn;
+          const y = top + (j + 1) * pxPerAnn;
+          ctx.moveTo(x0, y); ctx.lineTo(x0 + pxPerAnn, y);
+        }
+      }
+    }
+  }
+
+  ctx.stroke();
+  ctx.restore();
 }
 
 // Translucent band around the probe line representing the probe diameter.

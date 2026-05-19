@@ -1,19 +1,20 @@
 {
-  "atlas": "allen_mouse_50um",
-  "resolution_um": 50,
+  "atlas": "allen_mouse_25um",
+  "resolution_um": 25,
   "shape": {
-    "AP": 264,
-    "DV": 160,
-    "ML": 228
+    "AP": 528,
+    "DV": 320,
+    "ML": 456
   },
-  "annotation_100um": {
+  "annotation": {
+    "resolution_um": 50,
     "shape": [
-      132,
-      80,
-      114
+      264,
+      160,
+      228
     ],
     "dtype": "uint32",
-    "file": "annotation_100um.u32.bin"
+    "file": "annotation_50um.u32.bin"
   },
   "bregma_ccf_um": {
     "AP": 5400,
@@ -28,28 +29,28 @@
   "views": {
     "coronal": {
       "fixed_axis": "AP",
-      "n_slices": 264,
+      "n_slices": 528,
       "image_axes": {
         "x": "ML",
         "y": "DV"
       },
       "image_size_px": [
-        228,
-        160
+        456,
+        320
       ],
       "x_flipped": false,
       "y_flipped": false
     },
     "sagittal": {
       "fixed_axis": "ML",
-      "n_slices": 228,
+      "n_slices": 456,
       "image_axes": {
         "x": "AP",
         "y": "DV"
       },
       "image_size_px": [
-        264,
-        160
+        528,
+        320
       ],
       "x_flipped": true,
       "y_flipped": false,
@@ -57,14 +58,14 @@
     },
     "horizontal": {
       "fixed_axis": "DV",
-      "n_slices": 160,
+      "n_slices": 320,
       "image_axes": {
         "x": "ML",
         "y": "AP"
       },
       "image_size_px": [
-        228,
-        264
+        456,
+        528
       ],
       "x_flipped": false,
       "y_flipped": true,

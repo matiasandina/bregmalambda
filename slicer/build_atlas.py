@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image
 from brainglobe_atlasapi import BrainGlobeAtlas
 
-ATLAS_NAME = "allen_mouse_50um"
+ATLAS_NAME = "allen_mouse_25um"
 BREGMA_CCF_UM = {"AP": 5400, "DV": 332, "ML": 5700}
 
 OUT = Path(__file__).resolve().parent.parent / "atlas"
@@ -89,11 +89,14 @@ def main() -> None:
         "bottom": ds_bot,
     }))
 
-    # Region annotation volume, downsampled to 100 um for the browser.
+    # Region annotation volume, downsampled by stride 2 for the browser
+    # (50 µm when source is 25 µm; 100 µm when source is 50 µm).
     # Saved as raw little-endian uint32 in (AP, DV, ML) order.
     ann_ds = ann[::2, ::2, ::2].astype(np.uint32)
-    ann_ds.tofile(OUT / "annotation_100um.u32.bin")
-    print(f"Annotation volume (100 µm) shape = {ann_ds.shape}, "
+    ann_ds_res_um = int(res_um) * 2
+    ann_filename = f"annotation_{ann_ds_res_um}um.u32.bin"
+    ann_ds.tofile(OUT / ann_filename)
+    print(f"Annotation volume ({ann_ds_res_um} µm) shape = {ann_ds.shape}, "
           f"unique structures in volume = {len(np.unique(ann_ds))}")
 
     # Structure dictionary: id -> {acronym, name}. Pulled from brainglobe.
@@ -115,10 +118,11 @@ def main() -> None:
         "atlas": ATLAS_NAME,
         "resolution_um": int(res_um),
         "shape": {"AP": ref.shape[0], "DV": ref.shape[1], "ML": ref.shape[2]},
-        "annotation_100um": {
-            "shape": list(ann_ds.shape),  # (AP, DV, ML) at 100 µm
+        "annotation": {
+            "resolution_um": ann_ds_res_um,
+            "shape": list(ann_ds.shape),  # (AP, DV, ML) at ann_ds_res_um
             "dtype": "uint32",
-            "file":  "annotation_100um.u32.bin",
+            "file":  ann_filename,
         },
         "bregma_ccf_um": BREGMA_CCF_UM,
         "stereo_to_ccf_um": {
