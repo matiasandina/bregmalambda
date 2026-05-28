@@ -23,6 +23,12 @@ Built by [Matias Andina](https://matiasandina.com).
 - Tunable bregma offset in (AP, ML, DV) µm so you can calibrate to your strain.
   Calibration sticks in `localStorage`.
 - Optional probe width as a semi-transparent band overlay.
+- Optogenetic light-spread overlay. Pick wavelength, fiber NA/core, and
+  tip power; the planner overlays predicted irradiance (mW/mm²) with
+  isocontours at the user-chosen threshold. Uses the Kubelka–Munk model
+  from Aravanis 2007 / Yizhar 2011, same as the Stanford Deisseroth-lab
+  light-transmission calculator. 2-D slice through a 3-D cone — see the
+  in-app caveat.
 
 ## Corrections applied to the atlas
 
@@ -65,6 +71,11 @@ papers:
   planning for electrophysiology in mice. *eLife* (2024).
 - Chon U, Vanselow DJ, Cheng KC, Kim Y. Enhanced and unified anatomical
   labeling for a common mouse brain atlas. *Nat Commun* 10:5067 (2019).
+- Aravanis AM, Wang L-P, Zhang F, et al. An optical neural interface:
+  in vivo control of rodent motor cortex with integrated fiberoptic and
+  optogenetic technology. *J Neural Eng* 4:S143–S156 (2007).
+- Yizhar O, Fenno LE, Davidson TJ, Mogri M, Deisseroth K. Optogenetics
+  in neural systems. *Neuron* 71(1):9–34 (2011).
 
 ## License
 

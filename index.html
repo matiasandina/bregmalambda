@@ -164,10 +164,8 @@
     grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(380px, 460px);
     gap: 0;
     min-height: calc(100vh - 80px);
-    max-width: 1400px;
+    max-width: 1800px;
     margin: 0 auto;
-    border-left: 1px solid var(--rule);
-    border-right: 1px solid var(--rule);
   }
 
   @media (max-width: 1280px) {
@@ -217,6 +215,52 @@
     border-bottom: 1px dashed var(--rule);
   }
   .group-head:first-of-type { margin-top: 0; }
+
+  /* Collapsible sidebar group. Re-uses .group-head styling on the summary. */
+  details.group { margin: 0; padding: 0; }
+  details.group + details.group { margin-top: 4px; }
+  details.group > summary {
+    list-style: none;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #fff;
+    font-weight: 700;
+    margin: 22px 0 12px;
+    padding: 0 0 8px 18px;
+    border-bottom: 1px solid var(--rule);
+    position: relative;
+  }
+  details.group > summary:hover { color: var(--cyan); }
+  details.group > summary .sub {
+    font-size: 12px;
+    font-weight: 400;
+  }
+  details.group:first-of-type > summary { margin-top: 0; }
+  details.group > summary::-webkit-details-marker { display: none; }
+  details.group > summary::before {
+    content: '▸';
+    position: absolute;
+    left: 2px; top: 1px;
+    font-size: 11px;
+    color: var(--bone-dim);
+    transition: transform 0.15s ease;
+  }
+  details.group[open] > summary::before { transform: rotate(90deg); }
+  details.group > summary .sub {
+    display: block;
+    margin-top: 4px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--muted-2);
+    font-weight: 400;
+    line-height: 1.45;
+  }
+
   .group-head .sub {
     display: block;
     margin-top: 4px;
@@ -607,10 +651,10 @@
 
   /* Prominent target block at top of the recipe */
   .target-card {
-    background: var(--ink-1);
-    border-left: 3px solid var(--cyan);
-    padding: 12px 14px;
-    margin-bottom: 18px;
+    background: transparent;
+    border-left: 2px solid var(--cyan);
+    padding: 8px 12px;
+    margin-bottom: 14px;
   }
   .target-card .label-row {
     font-family: var(--mono);
@@ -622,8 +666,8 @@
   }
   .target-card .coords {
     font-family: var(--mono);
-    font-size: 19px;
-    color: var(--bone);
+    font-size: 15px;
+    color: var(--bone-dim);
     line-height: 1.4;
   }
   .target-card .coords b {
@@ -638,10 +682,10 @@
 
   /* Prominent region badge */
   .region-card {
-    background: var(--ink-1);
-    border-left: 3px solid var(--tungsten);
-    padding: 14px 16px;
-    margin-bottom: 18px;
+    background: transparent;
+    border-left: 2px solid var(--tungsten);
+    padding: 8px 12px;
+    margin-bottom: 14px;
   }
   .region-card .label-row {
     font-family: var(--mono);
@@ -654,15 +698,15 @@
   .region-card .acronym {
     font-family: var(--serif);
     font-variation-settings: "opsz" 144, "SOFT" 30;
-    font-size: 32px;
+    font-size: 22px;
     font-weight: 500;
     color: var(--tungsten);
-    line-height: 1;
+    line-height: 1.1;
     letter-spacing: -0.01em;
   }
   .region-card .name {
-    margin-top: 6px;
-    font-size: 14px;
+    margin-top: 4px;
+    font-size: 13px;
     color: var(--bone-dim);
     line-height: 1.4;
   }
@@ -951,59 +995,106 @@
       <span class="rule"></span>
     </div>
 
-    <div class="group-head">Target · mm from bregma</div>
+    <details class="group">
+      <summary>Target · mm from bregma</summary>
 
-    <div class="field">
-      <label>AP <span class="hint">+ ant   −  post</span></label>
-      <input id="ap" type="number" step="0.1" value="-1.5">
-    </div>
-    <div class="field">
-      <label>ML <span class="hint">+ right  −  left</span></label>
-      <input id="ml" type="number" step="0.1" value="0.2">
-    </div>
-    <div class="field">
-      <label>DV <span class="hint">depth · sign ignored</span></label>
-      <input id="dv" type="number" step="0.1" value="-5.6">
-    </div>
+      <div class="field">
+        <label>AP <span class="hint">+ ant   −  post</span></label>
+        <input id="ap" type="number" step="0.1" value="-1.5">
+      </div>
+      <div class="field">
+        <label>ML <span class="hint">+ right  −  left</span></label>
+        <input id="ml" type="number" step="0.1" value="0.2">
+      </div>
+      <div class="field">
+        <label>DV <span class="hint">depth · sign ignored</span></label>
+        <input id="dv" type="number" step="0.1" value="-5.6">
+      </div>
 
-    <div class="field wide">
-      <label>DV reference <span class="hint">where DV = 0</span></label>
-      <select id="dvRef">
-        <option value="skull" selected>from local skull (curved)</option>
-        <option value="bregma">from bregma plane (flat)</option>
-        <option value="brain">from local brain pial (atlas)</option>
-      </select>
-    </div>
+      <div class="field wide">
+        <label>DV reference <span class="hint">where DV = 0</span></label>
+        <select id="dvRef">
+          <option value="skull" selected>from local skull (curved)</option>
+          <option value="bregma">from bregma plane (flat)</option>
+          <option value="brain">from local brain pial (atlas)</option>
+        </select>
+      </div>
+    </details>
 
-    <div class="group-head">Probe angles<span class="sub">Degrees from vertical. 0 = straight down.</span></div>
+    <details class="group">
+      <summary>Probe angles<span class="sub">Degrees from vertical. 0 = straight down.</span></summary>
 
-    <div class="field">
-      <label>ML tilt <span class="hint">tip toward + ML</span></label>
-      <input id="mlTilt" type="number" step="1" value="0">
-    </div>
-    <div class="field">
-      <label>AP tilt <span class="hint">tip toward + AP</span></label>
-      <input id="apTilt" type="number" step="1" value="0">
-    </div>
+      <div class="field">
+        <label>ML tilt <span class="hint">tip toward + ML</span></label>
+        <input id="mlTilt" type="number" step="1" value="0">
+      </div>
+      <div class="field">
+        <label>AP tilt <span class="hint">tip toward + AP</span></label>
+        <input id="apTilt" type="number" step="1" value="0">
+      </div>
+    </details>
 
-    <div class="group-head">Bregma offset (µm in CCF)<span class="sub">Tune if regions look off. If targets at AP=0 look ~0.3–0.5 mm anterior in your mouse, try AP&nbsp;=&nbsp;5700–5800.</span></div>
-    <div class="field"><label>AP <span class="hint">Chon 5400, alt 5739</span></label><input id="bregmaAP" type="number" step="50" value="5400"></div>
-    <div class="field"><label>ML <span class="hint">Chon 5700</span></label><input id="bregmaML" type="number" step="50" value="5700"></div>
-    <div class="field"><label>DV <span class="hint">Chon 332</span></label><input id="bregmaDV" type="number" step="10" value="332"></div>
+    <details class="group">
+      <summary>Bregma offset (µm in CCF)<span class="sub">Tune if regions look off. If targets at AP=0 look ~0.3–0.5 mm anterior in your mouse, try AP&nbsp;=&nbsp;5700–5800.</span></summary>
+      <div class="field"><label>AP <span class="hint">Chon 5400, alt 5739</span></label><input id="bregmaAP" type="number" step="50" value="5400"></div>
+      <div class="field"><label>ML <span class="hint">Chon 5700</span></label><input id="bregmaML" type="number" step="50" value="5700"></div>
+      <div class="field"><label>DV <span class="hint">Chon 332</span></label><input id="bregmaDV" type="number" step="10" value="332"></div>
+    </details>
 
-    <div class="group-head">Probe geometry</div>
+    <details class="group">
+      <summary>Probe geometry</summary>
 
-    <div class="toggle-row">
-      <span class="label">Custom probe width</span>
-      <input id="probeWidthUm" type="number" step="50" value="400">
-      <span class="unit">µm</span>
-      <input type="checkbox" class="toggle" id="probeWidthOn">
-    </div>
+      <div class="toggle-row">
+        <span class="label">Custom probe width</span>
+        <input id="probeWidthUm" type="number" step="50" value="400">
+        <span class="unit">µm</span>
+        <input type="checkbox" class="toggle" id="probeWidthOn">
+      </div>
 
-    <div class="toggle-row">
-      <span class="label">Show Allen region outlines</span>
-      <input type="checkbox" class="toggle" id="regionOutlinesOn">
-    </div>
+      <div class="toggle-row">
+        <span class="label">Show Allen region outlines</span>
+        <input type="checkbox" class="toggle" id="regionOutlinesOn">
+      </div>
+    </details>
+
+    <details class="group">
+      <summary>Optogenetics<span class="sub">Predicted light spread from a flat-cut fiber at the probe tip. Kubelka–Munk model (Aravanis 2007 / Yizhar 2011; equivalent to the Stanford Deisseroth-lab calculator).</span></summary>
+
+      <div class="toggle-row">
+        <span class="label">Show light spread</span>
+        <input type="checkbox" class="toggle" id="optoOn">
+      </div>
+
+      <div class="field">
+        <label>Wavelength <span class="hint">sets scattering S</span></label>
+        <select id="optoWavelength">
+          <option value="473">473 nm (blue, ChR2)</option>
+          <option value="532">532 nm (green)</option>
+          <option value="589">589 nm (yellow, eNpHR)</option>
+          <option value="635">635 nm (red, ChrimsonR)</option>
+          <option value="custom">custom S…</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Scattering S <span class="hint">mm⁻¹, gray matter</span></label>
+        <input id="optoS" type="number" step="0.1" value="11.2">
+      </div>
+      <div class="field">
+        <label>Fiber NA</label>
+        <input id="optoNA" type="number" step="0.01" value="0.39">
+      </div>
+      <div class="secondary" style="font-size:11px; color:var(--muted-2); margin: 4px 0 8px;">
+        Fiber core diameter is taken from <b>Custom probe width</b> above (defaults to 400 µm).
+      </div>
+      <div class="field">
+        <label>Output power <span class="hint">mW at tip</span></label>
+        <input id="optoPowerMw" type="number" step="0.1" value="10">
+      </div>
+      <div class="field">
+        <label>Threshold iso-line <span class="hint">mW/mm²</span></label>
+        <input id="optoThreshold" type="number" step="0.1" value="1">
+      </div>
+    </details>
 
     <details class="help">
       <summary>Axis conventions</summary>
@@ -1259,7 +1350,12 @@ const imgCache = new Map();
 let hover = { view: null, regionId: 0 };
 // Snapshot of the current slice geometry, set inside render() so the hover
 // handler can map canvas pixels → atlas voxels without re-running the math.
-let viewState = { corIdx: 0, sagIdx: 0, atlasTopY: 0, W_apVoxels: 0 };
+let viewState = {
+  corIdx: 0, sagIdx: 0, atlasTopY: 0, W_apVoxels: 0,
+  // probe tip + axis (in canvas px) per view, for hover-irradiance lookup
+  corProbe: null, sagProbe: null,
+  optoParams: null, pxPerMm: 0,
+};
 
 function loadImg(view, idx) {
   const key = `${view}/${idx}`;
@@ -1312,7 +1408,25 @@ function bindHover(view, canvas, tooltipEl) {
     const id = annAtPixel(cx, cy);
     if (id && structures && structures[id]) {
       const s = structures[id];
-      tooltipEl.innerHTML = `<span class="acr">${s.acronym}</span><span class="nm">${s.name}</span>`;
+      let extra = '';
+      const op = viewState.optoParams;
+      const probe = view === 'coronal' ? viewState.corProbe : viewState.sagProbe;
+      if (op && probe && viewState.pxPerMm > 0) {
+        // project hovered px onto probe axis (tip = x2,y2; entry = x1,y1)
+        const dx = probe.x2 - probe.x1, dy = probe.y2 - probe.y1;
+        const L = Math.hypot(dx, dy);
+        if (L > 1e-3) {
+          const ux = dx / L, uy = dy / L;
+          const hx = cx - probe.x2, hy = cy - probe.y2;
+          const u_px = hx * ux + hy * uy;      // along probe, past tip
+          const r_px = hx * (-uy) + hy * (ux); // perpendicular, in-plane
+          const u_mm = u_px / viewState.pxPerMm;
+          const r_mm = Math.abs(r_px) / viewState.pxPerMm;
+          const I = u_mm >= 0 ? optoIrradiance(u_mm, r_mm, op) : 0;
+          extra = `<span class="nm" style="opacity:0.85;">≈ ${I >= 0.01 ? I.toFixed(2) : I.toExponential(1)} mW/mm² <span style="color:var(--muted-2);">(in-plane)</span></span>`;
+        }
+      }
+      tooltipEl.innerHTML = `<span class="acr">${s.acronym}</span><span class="nm">${s.name}</span>${extra}`;
       // position relative to the canvas-frame (tooltip's offset parent)
       const fx = ev.clientX - rect.left + 22;
       const fy = ev.clientY - rect.top + 26;
@@ -1370,10 +1484,17 @@ async function init() {
   COR.height = canvasH;
   SAG.width  = coords.views.sagittal.image_size_px[0] * SCALE;
   SAG.height = canvasH;
-  for (const id of ['ap','ml','dv','mlTilt','apTilt','dvRef','probeWidthOn','probeWidthUm','regionOutlinesOn','bregmaAP','bregmaML','bregmaDV']) {
+  for (const id of ['ap','ml','dv','mlTilt','apTilt','dvRef','probeWidthOn','probeWidthUm','regionOutlinesOn','bregmaAP','bregmaML','bregmaDV',
+                    'optoOn','optoWavelength','optoS','optoNA','optoPowerMw','optoThreshold']) {
     document.getElementById(id).addEventListener('input', render);
     document.getElementById(id).addEventListener('change', render);
   }
+  // wavelength preset → S (Yizhar 2011 / Stanford calculator defaults, mm⁻¹)
+  document.getElementById('optoWavelength').addEventListener('change', (ev) => {
+    const presets = { '473': 11.2, '532': 7.4, '589': 6.3, '635': 0.6 };
+    const v = ev.target.value;
+    if (presets[v] != null) document.getElementById('optoS').value = presets[v];
+  });
   bindHover('coronal', COR, document.getElementById('hoverTooltipCor'));
   bindHover('sagittal', SAG, document.getElementById('hoverTooltipSag'));
   // tab switching
@@ -1529,6 +1650,25 @@ async function render() {
   // because the canvas is isotropic in mm-per-px after our SCALE.
   const probeHalfPx = probeWidthOn ? (probeWidthUm / 1000) * pxPerMm() / 2 : 0;
 
+  // ----- Optogenetics params -----
+  const optoOn = document.getElementById('optoOn').checked;
+  let optoParams = null;
+  if (optoOn) {
+    const NA = Math.max(0.01, parseFloat(document.getElementById('optoNA').value) || 0.39);
+    const n_tissue = 1.36;
+    const sinTheta = Math.min(0.999, NA / n_tissue);
+    const tanTheta = sinTheta / Math.sqrt(1 - sinTheta * sinTheta);
+    // Fiber core diameter mirrors the "Custom probe width" input.
+    const coreUm = Math.max(1, parseFloat(document.getElementById('probeWidthUm').value) || 200);
+    optoParams = {
+      rho_mm:   (coreUm / 2) / 1000,
+      tanTheta: tanTheta,
+      S:        Math.max(0, parseFloat(document.getElementById('optoS').value) || 0),
+      P_mW:     Math.max(0, parseFloat(document.getElementById('optoPowerMw').value) || 0),
+      threshold: Math.max(1e-4, parseFloat(document.getElementById('optoThreshold').value) || 1),
+    };
+  }
+
   // depth into brain is |dv|; sign-agnostic
   const depth_mm = Math.abs(dv);
 
@@ -1622,6 +1762,9 @@ async function render() {
   ctxC.setLineDash([]);
   // probe-width band (translucent) behind the line
   if (probeHalfPx > 0) drawProbeBand(ctxC, sx_c, sy_c, tx, ty, probeHalfPx);
+  viewState.corProbe = { x1: sx_c, y1: sy_c, x2: tx, y2: ty };
+  // light spread (heatmap + isocontours), drawn under the probe line
+  if (optoParams) drawLightField(ctxC, sx_c, sy_c, tx, ty, optoParams, pxPerMm());
   // full physical probe path: skull entry → target. Solid bright core.
   drawProbe(ctxC, sx_c, sy_c, tx, ty);
   if (dvRef !== 'skull') drawDrillTick(ctxC, sx_c, sy_c);
@@ -1678,6 +1821,10 @@ async function render() {
   ctxS.moveTo(stx, 0); ctxS.lineTo(stx, SAG.height); ctxS.stroke();
   ctxS.setLineDash([]);
   if (probeHalfPx > 0) drawProbeBand(ctxS, ssx, ssy, stx, sty, probeHalfPx);
+  viewState.sagProbe = { x1: ssx, y1: ssy, x2: stx, y2: sty };
+  viewState.optoParams = optoParams;
+  viewState.pxPerMm = pxPerMm();
+  if (optoParams) drawLightField(ctxS, ssx, ssy, stx, sty, optoParams, pxPerMm());
   drawProbe(ctxS, ssx, ssy, stx, sty);
   if (dvRef !== 'skull') drawDrillTick(ctxS, ssx, ssy);
   drawMarker(ctxS, sex, sey, '#7be0ff');
@@ -1754,6 +1901,47 @@ async function render() {
     `<span class="secondary">Vertical (DV) drop = your input ${num(depth_mm)} mm; along-probe length = depth ÷ cos(tilt).</span></li>`
   );
   html.push(`</ol>`);
+
+  // ----- Optogenetics readout -----
+  if (optoParams) {
+    const p = optoParams;
+    const I_tip = optoIrradiance(0, 0, p);
+    // depth at which on-axis irradiance falls below threshold
+    let depth_thr = null;
+    for (let u = 0; u < 15; u += 0.01) {
+      if (optoIrradiance(u, 0, p) < p.threshold) { depth_thr = u; break; }
+    }
+    // lateral radius at tip plane where I = threshold
+    let radius_thr = 0;
+    {
+      const w = p.rho_mm;
+      const ratio = p.threshold / I_tip;
+      if (ratio > 0 && ratio < 1) radius_thr = w * Math.sqrt(-Math.log(ratio) / 2);
+    }
+    // approx illuminated volume above threshold (mm³): integrate πr(u)² du
+    let vol = 0;
+    if (depth_thr != null) {
+      const du = 0.01;
+      for (let u = 0; u <= depth_thr; u += du) {
+        const I_ax = optoIrradiance(u, 0, p);
+        if (I_ax < p.threshold) break;
+        const w = p.rho_mm + u * p.tanTheta;
+        const r2 = w * w * (-Math.log(p.threshold / I_ax) / 2);
+        if (r2 > 0) vol += Math.PI * r2 * du;
+      }
+    }
+    const wl = document.getElementById('optoWavelength').value;
+    html.push(
+      `<details class="subsection" open><summary>Light spread @ fiber tip · ${wl === 'custom' ? `S=${p.S} mm⁻¹` : `${wl} nm`}</summary>` +
+      `<div class="body">` +
+      `<div>Tip irradiance: <b>${I_tip.toFixed(1)}</b> mW/mm²</div>` +
+      `<div>Depth at ${p.threshold.toFixed(2)} mW/mm²: <b>${depth_thr == null ? '>15' : depth_thr.toFixed(2)}</b> mm along axis</div>` +
+      `<div>Radius at tip plane: <b>${radius_thr.toFixed(3)}</b> mm</div>` +
+      `<div>Illuminated volume ≥ threshold: <b>${vol.toFixed(3)}</b> mm³</div>` +
+      `<div class="secondary" style="margin-top:6px;">Model: Kubelka–Munk (Aravanis 2007; Yizhar 2011). 2-D slice through a 3-D cone — values off the slice plane aren't shown. Assumes flat-cut multimode fiber, gray-matter scattering, n_tissue = 1.36.</div>` +
+      `</div></details>`
+    );
+  }
 
   // ----- COLLAPSIBLES below -----
 
@@ -2147,6 +2335,159 @@ function drawRegionHighlight(ctx, view, annIdx, regionId) {
 // Translucent band around the probe line representing the probe diameter.
 // Drawn behind drawProbe(); the line stays as the bright core down the
 // middle of the band.
+// Predicted irradiance (mW/mm²) at axial depth u (mm beyond fiber tip)
+// and lateral radius r (mm from the probe axis). Aravanis 2007 /
+// Yizhar 2011 / Stanford Deisseroth-lab calculator:
+//   I(u,r) = (P/π ρ²) · ρ²/(ρ + u·tan θ)² · 1/(S u + 1) · exp(-2 r² / w²)
+// with ρ = fiber core radius, θ = asin(NA/n), w = ρ + u·tan θ.
+function optoIrradiance(u_mm, r_mm, p) {
+  if (u_mm < 0) return 0;
+  const w = p.rho_mm + u_mm * p.tanTheta;   // beam radius (mm)
+  const I_axis = (p.P_mW / (Math.PI * p.rho_mm * p.rho_mm))
+               * (p.rho_mm * p.rho_mm) / (w * w)
+               * 1.0 / (p.S * u_mm + 1.0);
+  return I_axis * Math.exp(-2.0 * r_mm * r_mm / (w * w));
+}
+
+// Render a magma-ish heatmap + iso-contours of the predicted irradiance
+// field on a 2-D atlas slice. (x1,y1) is the skull entry, (x2,y2) is the
+// probe tip in canvas px. Light propagates past the tip, away from entry.
+function drawLightField(ctx, x1, y1, x2, y2, params, pxPerMm) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-3) return;
+  const ux = dx / len, uy = dy / len;          // unit along probe (entry→tip)
+  const nx = -uy,      ny = ux;                 // unit perpendicular in-plane
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  // Build a bounding box of pixels worth evaluating: stop when on-axis
+  // irradiance drops below floor (≈0.01 of threshold or 1e-3 mW/mm²).
+  const floor = Math.max(1e-3, params.threshold * 0.01);
+  // axial extent: solve numerically (cheap stepping)
+  let u_max_mm = 0;
+  for (let u = 0; u < 12; u += 0.05) {
+    if (optoIrradiance(u, 0, params) < floor) { u_max_mm = u; break; }
+    u_max_mm = u;
+  }
+  const r_max_mm = (params.rho_mm + u_max_mm * params.tanTheta) * 2.5;
+  const u_max_px = u_max_mm * pxPerMm;
+  const r_max_px = r_max_mm * pxPerMm;
+  // axis-aligned bbox in canvas px
+  const corners = [
+    [ x2 + ux*0      + nx*(-r_max_px), y2 + uy*0      + ny*(-r_max_px) ],
+    [ x2 + ux*0      + nx*( r_max_px), y2 + uy*0      + ny*( r_max_px) ],
+    [ x2 + ux*u_max_px + nx*(-r_max_px), y2 + uy*u_max_px + ny*(-r_max_px) ],
+    [ x2 + ux*u_max_px + nx*( r_max_px), y2 + uy*u_max_px + ny*( r_max_px) ],
+  ];
+  let xmin = W, xmax = 0, ymin = H, ymax = 0;
+  for (const [px, py] of corners) {
+    if (px < xmin) xmin = px; if (px > xmax) xmax = px;
+    if (py < ymin) ymin = py; if (py > ymax) ymax = py;
+  }
+  xmin = Math.max(0, Math.floor(xmin));  xmax = Math.min(W - 1, Math.ceil(xmax));
+  ymin = Math.max(0, Math.floor(ymin));  ymax = Math.min(H - 1, Math.ceil(ymax));
+  if (xmax <= xmin || ymax <= ymin) return;
+  const bw = xmax - xmin + 1, bh = ymax - ymin + 1;
+  const img = ctx.createImageData(bw, bh);
+  const data = img.data;
+  // log-scale colormap: map log10(I/floor) in [0..log10(I_max/floor)] → magma
+  const I_max = optoIrradiance(0, 0, params);
+  const logLo = Math.log10(floor);
+  const logHi = Math.log10(Math.max(I_max, floor * 10));
+  for (let py = 0; py < bh; py++) {
+    for (let px = 0; px < bw; px++) {
+      const cx = (px + xmin) - x2;
+      const cy = (py + ymin) - y2;
+      const u_px = cx * ux + cy * uy;
+      const r_px = cx * nx + cy * ny;
+      if (u_px < 0) continue;
+      const u_mm = u_px / pxPerMm;
+      const r_mm = Math.abs(r_px) / pxPerMm;
+      const I = optoIrradiance(u_mm, r_mm, params);
+      if (I < floor) continue;
+      const t = Math.max(0, Math.min(1, (Math.log10(I) - logLo) / (logHi - logLo)));
+      // magma-ish ramp: dark purple → orange → pale yellow
+      const r8 = Math.round(255 * Math.min(1, 0.05 + 1.7 * t));
+      const g8 = Math.round(255 * Math.max(0, Math.min(1, -0.15 + 1.5 * t)));
+      const b8 = Math.round(255 * Math.max(0, Math.min(1, 0.55 - 0.65 * t + 0.5 * Math.max(0, t - 0.85))));
+      const a8 = Math.round(220 * (0.25 + 0.75 * t));
+      const idx = (py * bw + px) * 4;
+      data[idx]     = r8;
+      data[idx + 1] = g8;
+      data[idx + 2] = b8;
+      data[idx + 3] = a8;
+    }
+  }
+  // putImageData ignores globalCompositeOperation, so blit through an
+  // offscreen canvas to get a 'screen' blend over the atlas.
+  const off = document.createElement('canvas');
+  off.width = bw; off.height = bh;
+  off.getContext('2d').putImageData(img, 0, 0);
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.drawImage(off, xmin, ymin);
+  ctx.restore();
+
+  // Iso-contours: 10, 1, 0.1 mW/mm² (skip those above tip irradiance).
+  const isos = [10, params.threshold, params.threshold * 0.1].filter(
+    (v, i, a) => v > 0 && v <= I_max && a.indexOf(v) === i
+  );
+  ctx.save();
+  ctx.lineWidth = 1.2;
+  ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
+  ctx.textBaseline = 'middle';
+  for (const iso of isos) {
+    // For each axial step u, solve r where I(u,r) = iso:
+    //   exp(-2r²/w²) = iso / I_axis(u)
+    //   r = w · sqrt(-ln(iso/I_axis) / 2)
+    const pts = [];
+    const step_mm = 0.02;
+    for (let u_mm = 0; u_mm <= u_max_mm; u_mm += step_mm) {
+      const I_ax = optoIrradiance(u_mm, 0, params);
+      if (I_ax < iso) break;
+      const w = params.rho_mm + u_mm * params.tanTheta;
+      const ratio = iso / I_ax;
+      if (ratio >= 1) { pts.push([u_mm, 0]); continue; }
+      const r_mm = w * Math.sqrt(-Math.log(ratio) / 2);
+      pts.push([u_mm, r_mm]);
+    }
+    if (pts.length < 2) continue;
+    // emphasize the user-chosen threshold
+    const isMain = Math.abs(iso - params.threshold) < 1e-9;
+    ctx.strokeStyle = isMain ? 'rgba(255, 232, 188, 0.95)' : 'rgba(255, 232, 188, 0.55)';
+    ctx.lineWidth = isMain ? 1.6 : 1.0;
+    ctx.setLineDash(isMain ? [] : [4, 3]);
+    ctx.beginPath();
+    // upper half
+    for (let i = 0; i < pts.length; i++) {
+      const [u_mm, r_mm] = pts[i];
+      const px = x2 + ux * u_mm * pxPerMm + nx * r_mm * pxPerMm;
+      const py = y2 + uy * u_mm * pxPerMm + ny * r_mm * pxPerMm;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    // lower half (mirror across axis), traced backwards to close cleanly
+    for (let i = pts.length - 1; i >= 0; i--) {
+      const [u_mm, r_mm] = pts[i];
+      const px = x2 + ux * u_mm * pxPerMm + nx * (-r_mm) * pxPerMm;
+      const py = y2 + uy * u_mm * pxPerMm + ny * (-r_mm) * pxPerMm;
+      ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // label near the contour's deepest axial point
+    const last = pts[pts.length - 1];
+    const lx = x2 + ux * last[0] * pxPerMm + nx * (last[1] + 0.06) * pxPerMm;
+    const ly = y2 + uy * last[0] * pxPerMm + ny * (last[1] + 0.06) * pxPerMm;
+    const label = `${iso >= 1 ? iso.toFixed(0) : iso.toFixed(2)} mW/mm²`;
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(lx - 3, ly - 7, tw + 6, 14);
+    ctx.fillStyle = isMain ? '#ffe8bc' : 'rgba(255,232,188,0.8)';
+    ctx.fillText(label, lx, ly);
+  }
+  ctx.restore();
+}
+
 function drawProbeBand(ctx, x1, y1, x2, y2, halfWidthPx) {
   const dx = x2 - x1, dy = y2 - y1;
   const len = Math.hypot(dx, dy);
