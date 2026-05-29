@@ -146,6 +146,106 @@
     background: var(--tungsten-glow);
     display: flex; align-items: center; gap: 7px;
   }
+  .help-btn {
+    cursor: pointer;
+    background: transparent;
+    color: var(--tungsten-2);
+    border-color: rgba(255,186,92,0.35);
+    font-family: var(--mono);
+    letter-spacing: 0.12em;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .help-btn:hover {
+    background: var(--tungsten-glow);
+    color: var(--tungsten);
+  }
+
+  /* ----- Onboarding tour ----- */
+  .tour[hidden] { display: none; }
+  .tour-spot {
+    position: fixed;
+    border-radius: 7px;
+    box-shadow: 0 0 0 9999px rgba(6, 8, 12, 0.80);
+    border: 1.5px solid var(--tungsten);
+    pointer-events: none;
+    z-index: 9998;
+    transition: top 0.28s cubic-bezier(.4,0,.2,1), left 0.28s cubic-bezier(.4,0,.2,1),
+                width 0.28s cubic-bezier(.4,0,.2,1), height 0.28s cubic-bezier(.4,0,.2,1);
+  }
+  .tour-card {
+    position: fixed;
+    z-index: 9999;
+    width: 340px; max-width: calc(100vw - 32px);
+    background: var(--ink-2);
+    border: 1px solid var(--rule);
+    border-top: 2px solid var(--tungsten);
+    padding: 18px 20px 16px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.55);
+    transition: top 0.28s cubic-bezier(.4,0,.2,1), left 0.28s cubic-bezier(.4,0,.2,1);
+  }
+  .tour-card .tour-step {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--tungsten);
+    margin-bottom: 8px;
+  }
+  .tour-card h3 {
+    margin: 0 0 8px;
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 21px;
+    color: var(--bone);
+    line-height: 1.15;
+  }
+  .tour-card p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--bone-dim);
+  }
+  .tour-dots {
+    display: flex; gap: 7px;
+    margin: 16px 0 14px;
+  }
+  .tour-dots span {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--rule);
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .tour-dots span.on {
+    background: var(--tungsten);
+    transform: scale(1.25);
+  }
+  .tour-actions {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tour-btn {
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 7px 13px;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--bone-dim);
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .tour-btn:hover { color: var(--bone); border-color: var(--bone-dim); }
+  .tour-btn.ghost { border-color: transparent; color: var(--muted); padding-left: 0; }
+  .tour-btn.ghost:hover { color: var(--bone-dim); }
+  .tour-btn.primary {
+    background: var(--tungsten);
+    border-color: var(--tungsten);
+    color: var(--ink);
+    font-weight: 700;
+  }
+  .tour-btn.primary:hover { background: var(--tungsten-2); border-color: var(--tungsten-2); }
+  .tour-btn[disabled] { opacity: 0.35; cursor: default; pointer-events: none; }
   .badge.live::before {
     content: ""; width: 6px; height: 6px;
     border-radius: 50%;
@@ -161,15 +261,16 @@
   /* ----- Main grid ----- */
   main {
     display: grid;
-    grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(380px, 460px);
+    grid-template-columns: minmax(280px, var(--side-l, 320px)) minmax(0, 1fr) minmax(380px, var(--side-r, 460px));
     gap: 0;
     min-height: calc(100vh - 80px);
-    max-width: 1800px;
+    max-width: var(--main-max, 1800px);
     margin: 0 auto;
   }
 
   @media (max-width: 1280px) {
     main { grid-template-columns: 1fr; }
+    .resize-grip { display: none; }
   }
 
   /* shared column styling */
@@ -502,6 +603,38 @@
   .canvas-frame .tick-br {
     bottom: -1px; right: -1px;
     border-width: 0 1px 1px 0;
+  }
+
+  /* drag-to-resize grip, anchored on the bottom-right golden bracket */
+  .resize-grip {
+    position: absolute;
+    right: -3px; bottom: -3px;
+    width: 30px; height: 30px;
+    cursor: se-resize;
+    z-index: 7;
+    touch-action: none;
+  }
+  .resize-grip::after {
+    content: "";
+    position: absolute;
+    right: 4px; bottom: 4px;
+    width: 9px; height: 9px;
+    border-right: 2px solid var(--tungsten);
+    border-bottom: 2px solid var(--tungsten);
+    opacity: 0.55;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  .resize-grip:hover::after,
+  .resize-grip.dragging::after {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+  /* brighten the corner bracket while grabbing */
+  .canvas-frame:has(.resize-grip:hover) .tick-br,
+  .canvas-frame:has(.resize-grip.dragging) .tick-br {
+    opacity: 1;
+    border-color: var(--tungsten-2);
+    width: 18px; height: 18px;
   }
 
   .canvas-meta {
@@ -981,6 +1114,7 @@
     <span class="badge" title="Chon 2019 : bregma fiducial 332 µm into the CCF dorsal volume">bregma DV = 332 µm</span>
     <span class="badge" title="CCFv3 to stereotaxic: pitch rotation + per-axis scaling (Pinpoint)">CCF→stereo &nbsp;pitch +5°, scale AP 1.031 / ML 0.952 / DV 0.885</span>
     <span class="badge live">live</span>
+    <button type="button" class="badge help-btn" id="tourBtn" title="Show the tutorial">? Tour</button>
   </div>
 </header>
 
@@ -995,7 +1129,7 @@
       <span class="rule"></span>
     </div>
 
-    <details class="group">
+    <details class="group" id="targetGroup">
       <summary>Target · mm from bregma</summary>
 
       <div class="field">
@@ -1034,7 +1168,7 @@
       </div>
     </details>
 
-    <details class="group">
+    <details class="group" id="bregmaGroup">
       <summary>Bregma offset (µm in CCF)<span class="sub">Tune if regions look off. If targets at AP=0 look ~0.3–0.5 mm anterior in your mouse, try AP&nbsp;=&nbsp;5700–5800.</span></summary>
       <div class="field"><label>AP <span class="hint">Chon 5400, alt 5739</span></label><input id="bregmaAP" type="number" step="50" value="5400"></div>
       <div class="field"><label>ML <span class="hint">Chon 5700</span></label><input id="bregmaML" type="number" step="50" value="5700"></div>
@@ -1057,7 +1191,7 @@
       </div>
     </details>
 
-    <details class="group">
+    <details class="group" id="optoGroup">
       <summary>Optogenetics<span class="sub">Predicted light spread from a flat-cut fiber at the probe tip. Kubelka–Munk model (Aravanis 2007 / Yizhar 2011; equivalent to the Stanford Deisseroth-lab calculator).</span></summary>
 
       <div class="toggle-row">
@@ -1072,8 +1206,12 @@
           <option value="532">532 nm (green)</option>
           <option value="589">589 nm (yellow, eNpHR)</option>
           <option value="635">635 nm (red, ChrimsonR)</option>
-          <option value="custom">custom S…</option>
+          <option value="custom">custom wavelength…</option>
         </select>
+      </div>
+      <div class="field" id="optoCustomWlField" style="display:none;">
+        <label>Custom λ <span class="hint">nm</span></label>
+        <input id="optoCustomWl" type="number" step="1" min="380" max="720" value="561">
       </div>
       <div class="field">
         <label>Scattering S <span class="hint">mm⁻¹, gray matter</span></label>
@@ -1138,6 +1276,7 @@
           <span class="tick-tl"></span><span class="tick-br"></span>
           <canvas id="coronal" width="912" height="640"></canvas>
           <div class="hover-tooltip" id="hoverTooltipCor"></div>
+          <span class="resize-grip" title="Drag to resize · double-click to reset"></span>
         </div>
         <div class="scale-row">
           <span>− ML &nbsp; left</span>
@@ -1154,6 +1293,7 @@
           <span class="tick-tl"></span><span class="tick-br"></span>
           <canvas id="sagittal" width="1056" height="640"></canvas>
           <div class="hover-tooltip" id="hoverTooltipSag"></div>
+          <span class="resize-grip" title="Drag to resize · double-click to reset"></span>
         </div>
         <div class="scale-row">
           <span>− AP &nbsp; posterior</span>
@@ -1261,6 +1401,23 @@
   <span class="bmc-icon">☕</span>
   <span class="bmc-label">buy me a coffee</span>
 </a>
+
+<!-- Onboarding spotlight tour -->
+<div class="tour" id="tour" hidden>
+  <div class="tour-spot" id="tourSpot"></div>
+  <div class="tour-card" id="tourCard" role="dialog" aria-modal="true">
+    <div class="tour-step" id="tourStep">Step 1 / 5</div>
+    <h3 id="tourTitle"></h3>
+    <p id="tourBody"></p>
+    <div class="tour-dots" id="tourDots"></div>
+    <div class="tour-actions">
+      <button type="button" class="tour-btn ghost" id="tourSkip">Skip</button>
+      <span style="flex:1"></span>
+      <button type="button" class="tour-btn" id="tourBack">Back</button>
+      <button type="button" class="tour-btn primary" id="tourNext">Next</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const SCALE = 2;   // canvas zoom (px per atlas voxel along x)
@@ -1485,15 +1642,30 @@ async function init() {
   SAG.width  = coords.views.sagittal.image_size_px[0] * SCALE;
   SAG.height = canvasH;
   for (const id of ['ap','ml','dv','mlTilt','apTilt','dvRef','probeWidthOn','probeWidthUm','regionOutlinesOn','bregmaAP','bregmaML','bregmaDV',
-                    'optoOn','optoWavelength','optoS','optoNA','optoPowerMw','optoThreshold']) {
+                    'optoOn','optoWavelength','optoCustomWl','optoS','optoNA','optoPowerMw','optoThreshold']) {
     document.getElementById(id).addEventListener('input', render);
     document.getElementById(id).addEventListener('change', render);
   }
-  // wavelength preset → S (Yizhar 2011 / Stanford calculator defaults, mm⁻¹)
-  document.getElementById('optoWavelength').addEventListener('change', (ev) => {
-    const presets = { '473': 11.2, '532': 7.4, '589': 6.3, '635': 0.6 };
-    const v = ev.target.value;
-    if (presets[v] != null) document.getElementById('optoS').value = presets[v];
+  // wavelength → S (Yizhar 2011 / Stanford calculator defaults, mm⁻¹).
+  // Custom λ interpolates S between these anchors and reveals the nm input.
+  function syncOptoWavelength() {
+    const v = document.getElementById('optoWavelength').value;
+    const custField = document.getElementById('optoCustomWlField');
+    if (v === 'custom') {
+      custField.style.display = '';
+      const nm = parseFloat(document.getElementById('optoCustomWl').value) || 561;
+      document.getElementById('optoS').value = scatteringForWavelength(nm).toFixed(1);
+    } else {
+      custField.style.display = 'none';
+      document.getElementById('optoS').value = scatteringForWavelength(parseFloat(v));
+    }
+  }
+  document.getElementById('optoWavelength').addEventListener('change', syncOptoWavelength);
+  document.getElementById('optoCustomWl').addEventListener('input', () => {
+    if (document.getElementById('optoWavelength').value === 'custom') {
+      const nm = parseFloat(document.getElementById('optoCustomWl').value) || 561;
+      document.getElementById('optoS').value = scatteringForWavelength(nm).toFixed(1);
+    }
   });
   bindHover('coronal', COR, document.getElementById('hoverTooltipCor'));
   bindHover('sagittal', SAG, document.getElementById('hoverTooltipSag'));
@@ -1505,7 +1677,178 @@ async function init() {
       for (const p of document.querySelectorAll('.view-pane')) p.classList.toggle('active', p.dataset.pane === target);
     });
   }
+  setupCanvasResize();
+  setupTour();
   render();
+}
+
+// ----- Corner-drag canvas resize -----
+// Dragging the bottom-right grip widens the centre column: first lift the
+// 1800px page cap toward the window width (free side-margin space), then
+// reclaim width from the right panel, then the left. State is one scalar
+// (px dragged) persisted in localStorage and re-distributed across budgets.
+const LAYOUT_KEY = 'bl_layout_expand';
+const MAIN_MAX_BASE = 1800, SIDE_R_BASE = 460, SIDE_R_MIN = 380,
+      SIDE_L_BASE = 320, SIDE_L_MIN = 280;
+
+function layoutBudgets() {
+  return {
+    cap: Math.max(0, window.innerWidth - MAIN_MAX_BASE),  // lift page cap
+    r:   SIDE_R_BASE - SIDE_R_MIN,                          // shrink right
+    l:   SIDE_L_BASE - SIDE_L_MIN,                          // shrink left
+  };
+}
+function applyLayoutExpand(px) {
+  const b = layoutBudgets();
+  const total = b.cap + b.r + b.l;
+  const e = Math.max(0, Math.min(px, total));
+  const s = document.documentElement.style;
+  const useCap = Math.min(e, b.cap);
+  const useR   = Math.min(e - useCap, b.r);
+  const useL   = Math.min(e - useCap - useR, b.l);
+  s.setProperty('--main-max', (MAIN_MAX_BASE + useCap) + 'px');
+  s.setProperty('--side-r',   (SIDE_R_BASE - useR) + 'px');
+  s.setProperty('--side-l',   (SIDE_L_BASE - useL) + 'px');
+  return e;
+}
+function setupCanvasResize() {
+  if (window.innerWidth <= 1280) return;
+  let expand = parseFloat(localStorage.getItem(LAYOUT_KEY)) || 0;
+  expand = applyLayoutExpand(expand);
+
+  for (const grip of document.querySelectorAll('.resize-grip')) {
+    grip.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      grip.classList.add('dragging');
+      grip.setPointerCapture(ev.pointerId);
+      const startX = ev.clientX, startExpand = expand;
+      const onMove = (e) => { expand = applyLayoutExpand(startExpand + (e.clientX - startX)); };
+      const onUp = () => {
+        grip.classList.remove('dragging');
+        localStorage.setItem(LAYOUT_KEY, String(expand));
+        grip.removeEventListener('pointermove', onMove);
+        grip.removeEventListener('pointerup', onUp);
+      };
+      grip.addEventListener('pointermove', onMove);
+      grip.addEventListener('pointerup', onUp);
+    });
+    // double-click resets to the default layout
+    grip.addEventListener('dblclick', () => {
+      expand = applyLayoutExpand(0);
+      localStorage.setItem(LAYOUT_KEY, '0');
+    });
+  }
+  // window resize changes the cap budget; re-clamp the saved expand
+  window.addEventListener('resize', () => { expand = applyLayoutExpand(expand); });
+}
+
+// ----- Onboarding spotlight tour -----
+const TOUR_KEY = 'bl_onboarded';
+const TOUR_STEPS = [
+  { sel: null, title: 'Plan a stereotaxic implant',
+    body: 'This tool maps your AP/ML/DV target onto the Allen atlas with stereotaxic corrections applied, then hands you a rig recipe. Quick tour — a few steps.' },
+  { sel: '#targetGroup', open: '#targetGroup', title: 'Set your target',
+    body: 'Enter the target in mm from bregma. Probe angles, bregma calibration, and an optogenetics overlay live in the collapsible groups below.' },
+  { sel: '#dvRef', open: '#targetGroup', title: 'Pick your DV reference',
+    body: 'DV = 0 can be measured three ways: the curved local skull (default), the flat bregma plane, or the brain’s pial surface. Pick whichever matches how you zero your probe on the rig — it changes the depth the planner expects.' },
+  { sel: '#bregmaGroup', open: '#bregmaGroup', title: 'Calibrate to your animal',
+    body: 'CCFv3 is an average brain. If atlas regions read systematically off for your strain or age, nudge the bregma offset (µm in the CCF grid) until the readout matches what you expect. The calibration sticks across sessions.' },
+  { sel: '#optoGroup', open: '#optoGroup', title: 'Optogenetic light spread',
+    body: 'Optional: overlay predicted irradiance from a fiber at the probe tip (Kubelka–Munk model). Set wavelength, NA, and power to see mW/mm² isocontours and the illuminated volume. The heatmap is tinted to the light’s colour.' },
+  { sel: '.atlas-stack', title: 'Read the trajectory',
+    body: 'Coronal and sagittal slices show the probe path, surfaces, and target region. Hover with region outlines on to identify structures. Drag the golden bottom-right corner to enlarge the view; double-click it to reset.' },
+  { sel: '.recipe', title: 'Follow the recipe',
+    body: 'The right panel gives the Allen region at target plus a step-by-step rig recipe: arm angles, skull-entry point, craniotomy, and how far to lower the probe.' },
+  { sel: '#tourBtn', title: 'That’s the tour',
+    body: 'You can reopen this walkthrough anytime with the “? Tour” button up here in the header. Happy planning.' },
+];
+let tourIdx = 0;
+
+function setupTour() {
+  const tour = document.getElementById('tour');
+  const card = document.getElementById('tourCard');
+  const spot = document.getElementById('tourSpot');
+  const dots = document.getElementById('tourDots');
+  TOUR_STEPS.forEach(() => { const d = document.createElement('span'); dots.appendChild(d); });
+
+  function place() {
+    const step = TOUR_STEPS[tourIdx];
+    const pad = 8;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const el = step.sel ? document.querySelector(step.sel) : null;
+    if (el) {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    // wait a frame so scroll settles, then measure
+    requestAnimationFrame(() => {
+      if (el) {
+        const r = el.getBoundingClientRect();
+        const top = Math.max(pad, r.top - pad), left = Math.max(pad, r.left - pad);
+        const w = Math.min(vw - left - pad, r.width + pad * 2);
+        const h = Math.min(vh - top - pad, r.height + pad * 2);
+        spot.style.opacity = '1';
+        spot.style.top = top + 'px';  spot.style.left = left + 'px';
+        spot.style.width = w + 'px';  spot.style.height = h + 'px';
+        // prefer placing the card to the right of the spot, else left, else below
+        const cw = card.offsetWidth, ch = card.offsetHeight;
+        let cx, cy;
+        if (r.right + 18 + cw <= vw)      cx = r.right + 18;
+        else if (r.left - 18 - cw >= 0)   cx = r.left - 18 - cw;
+        else                              cx = Math.max(pad, Math.min(vw - cw - pad, r.left));
+        cy = Math.max(pad, Math.min(vh - ch - pad, r.top + r.height / 2 - ch / 2));
+        card.style.top = cy + 'px';  card.style.left = cx + 'px';
+      } else {
+        // welcome / no target: dim everything, centre the card
+        spot.style.opacity = '0';
+        spot.style.top = '50%'; spot.style.left = '50%';
+        spot.style.width = '0'; spot.style.height = '0';
+        card.style.top = Math.max(20, vh / 2 - card.offsetHeight / 2) + 'px';
+        card.style.left = (vw / 2 - card.offsetWidth / 2) + 'px';
+      }
+    });
+  }
+
+  function show(i) {
+    tourIdx = Math.max(0, Math.min(TOUR_STEPS.length - 1, i));
+    const step = TOUR_STEPS[tourIdx];
+    document.getElementById('tourStep').textContent = `Step ${tourIdx + 1} / ${TOUR_STEPS.length}`;
+    document.getElementById('tourTitle').textContent = step.title;
+    document.getElementById('tourBody').textContent = step.body;
+    [...dots.children].forEach((d, k) => d.classList.toggle('on', k === tourIdx));
+    document.getElementById('tourBack').disabled = tourIdx === 0;
+    document.getElementById('tourNext').textContent = tourIdx === TOUR_STEPS.length - 1 ? 'Done' : 'Next';
+    // open the collapsible group this step calls for; collapse the others
+    collapseTourGroups();
+    if (step.open) { const g = document.querySelector(step.open); if (g) g.open = true; }
+    place();
+  }
+  function collapseTourGroups() {
+    for (const sel of ['#targetGroup', '#bregmaGroup', '#optoGroup']) {
+      const g = document.querySelector(sel); if (g) g.open = false;
+    }
+  }
+  function open() { tour.hidden = false; show(0); }
+  function close() {
+    tour.hidden = true;
+    localStorage.setItem(TOUR_KEY, '1');
+    collapseTourGroups();
+  }
+
+  document.getElementById('tourNext').addEventListener('click', () => {
+    if (tourIdx === TOUR_STEPS.length - 1) close(); else show(tourIdx + 1);
+  });
+  document.getElementById('tourBack').addEventListener('click', () => show(tourIdx - 1));
+  document.getElementById('tourSkip').addEventListener('click', close);
+  document.getElementById('tourBtn').addEventListener('click', open);
+  document.addEventListener('keydown', (e) => {
+    if (tour.hidden) return;
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowRight') { if (tourIdx < TOUR_STEPS.length - 1) show(tourIdx + 1); }
+    else if (e.key === 'ArrowLeft')  { if (tourIdx > 0) show(tourIdx - 1); }
+  });
+  window.addEventListener('resize', () => { if (!tour.hidden) place(); });
+
+  if (!localStorage.getItem(TOUR_KEY)) setTimeout(open, 600);
 }
 
 function stereoToCcfUm(ap_mm, ml_mm, dv_skull_mm) {
@@ -1660,12 +2003,24 @@ async function render() {
     const tanTheta = sinTheta / Math.sqrt(1 - sinTheta * sinTheta);
     // Fiber core diameter mirrors the "Custom probe width" input.
     const coreUm = Math.max(1, parseFloat(document.getElementById('probeWidthUm').value) || 200);
+    // heatmap hue keyed to wavelength so the overlay reads as the actual light
+    const WL_COLORS = {
+      '473': [70, 130, 255],   // blue
+      '532': [60, 215, 95],    // green
+      '589': [255, 205, 70],   // amber/yellow
+      '635': [255, 70, 70],    // red
+    };
+    const wlVal = document.getElementById('optoWavelength').value;
+    const color = wlVal === 'custom'
+      ? wavelengthToRGB(parseFloat(document.getElementById('optoCustomWl').value) || 561)
+      : (WL_COLORS[wlVal] || [200, 205, 215]);
     optoParams = {
       rho_mm:   (coreUm / 2) / 1000,
       tanTheta: tanTheta,
       S:        Math.max(0, parseFloat(document.getElementById('optoS').value) || 0),
       P_mW:     Math.max(0, parseFloat(document.getElementById('optoPowerMw').value) || 0),
       threshold: Math.max(1e-4, parseFloat(document.getElementById('optoThreshold').value) || 1),
+      color:    color,
     };
   }
 
@@ -1931,8 +2286,11 @@ async function render() {
       }
     }
     const wl = document.getElementById('optoWavelength').value;
+    const wlLabel = wl === 'custom'
+      ? `${parseFloat(document.getElementById('optoCustomWl').value) || 561} nm · S=${p.S} mm⁻¹`
+      : `${wl} nm`;
     html.push(
-      `<details class="subsection" open><summary>Light spread @ fiber tip · ${wl === 'custom' ? `S=${p.S} mm⁻¹` : `${wl} nm`}</summary>` +
+      `<details class="subsection" open><summary>Light spread @ fiber tip · ${wlLabel}</summary>` +
       `<div class="body">` +
       `<div>Tip irradiance: <b>${I_tip.toFixed(1)}</b> mW/mm²</div>` +
       `<div>Depth at ${p.threshold.toFixed(2)} mW/mm²: <b>${depth_thr == null ? '>15' : depth_thr.toFixed(2)}</b> mm along axis</div>` +
@@ -2335,6 +2693,39 @@ function drawRegionHighlight(ctx, view, annIdx, regionId) {
 // Translucent band around the probe line representing the probe diameter.
 // Drawn behind drawProbe(); the line stays as the bright core down the
 // middle of the band.
+// Gray-matter scattering coefficient S (mm⁻¹) as a function of wavelength.
+// Anchors are the Yizhar 2011 / Stanford-calculator values; in between we
+// interpolate linearly, and clamp to the nearest anchor outside the range.
+const SCATTER_ANCHORS = [[473, 11.2], [532, 7.4], [589, 6.3], [635, 0.6]];
+function scatteringForWavelength(nm) {
+  const a = SCATTER_ANCHORS;
+  if (nm <= a[0][0]) return a[0][1];
+  if (nm >= a[a.length - 1][0]) return a[a.length - 1][1];
+  for (let i = 0; i < a.length - 1; i++) {
+    const [w0, s0] = a[i], [w1, s1] = a[i + 1];
+    if (nm >= w0 && nm <= w1) {
+      const f = (nm - w0) / (w1 - w0);
+      return Math.round((s0 + (s1 - s0) * f) * 10) / 10;
+    }
+  }
+  return a[a.length - 1][1];
+}
+// Approximate visible-spectrum wavelength (nm) → [r,g,b] 0-255, so a custom
+// wavelength still tints the heatmap with a believable colour.
+function wavelengthToRGB(nm) {
+  let r = 0, g = 0, b = 0;
+  if (nm >= 380 && nm < 440)      { r = -(nm - 440) / 60; b = 1; }
+  else if (nm < 490)             { g = (nm - 440) / 50; b = 1; }
+  else if (nm < 510)             { g = 1; b = -(nm - 510) / 20; }
+  else if (nm < 580)             { r = (nm - 510) / 70; g = 1; }
+  else if (nm < 645)             { r = 1; g = -(nm - 645) / 65; }
+  else if (nm <= 720)            { r = 1; }
+  else                           { r = 1; }
+  // lift very dark hues so the overlay stays visible
+  const lift = (c) => Math.round(255 * (0.25 + 0.75 * c));
+  return [lift(r), lift(g), lift(b)];
+}
+
 // Predicted irradiance (mW/mm²) at axial depth u (mm beyond fiber tip)
 // and lateral radius r (mm from the probe axis). Aravanis 2007 /
 // Yizhar 2011 / Stanford Deisseroth-lab calculator:
@@ -2389,10 +2780,14 @@ function drawLightField(ctx, x1, y1, x2, y2, params, pxPerMm) {
   const bw = xmax - xmin + 1, bh = ymax - ymin + 1;
   const img = ctx.createImageData(bw, bh);
   const data = img.data;
-  // log-scale colormap: map log10(I/floor) in [0..log10(I_max/floor)] → magma
+  // log-scale, single-hue colormap tinted by the light's wavelength so it
+  // visually reads as blue / green / amber / red light. Ramp: black → hue →
+  // white-hot core. Blended with 'screen' over the dark atlas below.
   const I_max = optoIrradiance(0, 0, params);
   const logLo = Math.log10(floor);
   const logHi = Math.log10(Math.max(I_max, floor * 10));
+  const [hr, hg, hb] = params.color || [255, 186, 92];
+  const PIVOT = 0.72;   // below: ramp up to full hue; above: blend toward white
   for (let py = 0; py < bh; py++) {
     for (let px = 0; px < bw; px++) {
       const cx = (px + xmin) - x2;
@@ -2405,15 +2800,19 @@ function drawLightField(ctx, x1, y1, x2, y2, params, pxPerMm) {
       const I = optoIrradiance(u_mm, r_mm, params);
       if (I < floor) continue;
       const t = Math.max(0, Math.min(1, (Math.log10(I) - logLo) / (logHi - logLo)));
-      // magma-ish ramp: dark purple → orange → pale yellow
-      const r8 = Math.round(255 * Math.min(1, 0.05 + 1.7 * t));
-      const g8 = Math.round(255 * Math.max(0, Math.min(1, -0.15 + 1.5 * t)));
-      const b8 = Math.round(255 * Math.max(0, Math.min(1, 0.55 - 0.65 * t + 0.5 * Math.max(0, t - 0.85))));
-      const a8 = Math.round(220 * (0.25 + 0.75 * t));
+      let r8, g8, b8;
+      if (t < PIVOT) {
+        const f = t / PIVOT;
+        r8 = hr * f; g8 = hg * f; b8 = hb * f;
+      } else {
+        const f = (t - PIVOT) / (1 - PIVOT);
+        r8 = hr + (255 - hr) * f; g8 = hg + (255 - hg) * f; b8 = hb + (255 - hb) * f;
+      }
+      const a8 = Math.round(225 * (0.28 + 0.72 * t));
       const idx = (py * bw + px) * 4;
-      data[idx]     = r8;
-      data[idx + 1] = g8;
-      data[idx + 2] = b8;
+      data[idx]     = Math.round(r8);
+      data[idx + 1] = Math.round(g8);
+      data[idx + 2] = Math.round(b8);
       data[idx + 3] = a8;
     }
   }
@@ -2453,7 +2852,7 @@ function drawLightField(ctx, x1, y1, x2, y2, params, pxPerMm) {
     if (pts.length < 2) continue;
     // emphasize the user-chosen threshold
     const isMain = Math.abs(iso - params.threshold) < 1e-9;
-    ctx.strokeStyle = isMain ? 'rgba(255, 232, 188, 0.95)' : 'rgba(255, 232, 188, 0.55)';
+    ctx.strokeStyle = isMain ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.5)';
     ctx.lineWidth = isMain ? 1.6 : 1.0;
     ctx.setLineDash(isMain ? [] : [4, 3]);
     ctx.beginPath();
@@ -2482,7 +2881,7 @@ function drawLightField(ctx, x1, y1, x2, y2, params, pxPerMm) {
     const tw = ctx.measureText(label).width;
     ctx.fillStyle = 'rgba(0,0,0,0.72)';
     ctx.fillRect(lx - 3, ly - 7, tw + 6, 14);
-    ctx.fillStyle = isMain ? '#ffe8bc' : 'rgba(255,232,188,0.8)';
+    ctx.fillStyle = isMain ? '#ffffff' : 'rgba(255,255,255,0.8)';
     ctx.fillText(label, lx, ly);
   }
   ctx.restore();
