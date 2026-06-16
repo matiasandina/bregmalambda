@@ -91,6 +91,8 @@
 
   /* ----- Header ----- */
   header.bar {
+    position: relative;
+    z-index: 100;            /* keep the export dropdown above the columns */
     display: flex;
     align-items: baseline;
     gap: 28px;
@@ -605,6 +607,80 @@
     border-width: 0 1px 1px 0;
   }
 
+  /* per-canvas PNG export button, top-right of the frame */
+  .canvas-export {
+    position: absolute;
+    right: 6px; top: 6px;
+    z-index: 6;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border: 1px solid rgba(255,186,92,0.4);
+    background: rgba(8,10,14,0.78);
+    color: var(--tungsten-2);
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .canvas-export:hover {
+    background: var(--tungsten-glow);
+    color: var(--tungsten);
+    border-color: var(--tungsten);
+  }
+
+  /* header export dropdown */
+  .export-menu { position: relative; display: inline-flex; }
+  .export-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 220px;
+    background: var(--ink-2);
+    border: 1px solid var(--rule);
+    box-shadow: 0 14px 32px rgba(0,0,0,0.55);
+    z-index: 50;
+    padding: 4px 0;
+  }
+  .export-dropdown[hidden] { display: none; }
+  .export-dropdown button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    color: var(--bone-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 9px 14px;
+    cursor: pointer;
+  }
+  .export-dropdown button:hover {
+    background: var(--tungsten-glow);
+    color: var(--bone);
+  }
+
+  /* transient toast for "copied" / "saved" messages */
+  .toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    background: var(--ink-2);
+    border: 1px solid var(--tungsten);
+    color: var(--bone);
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    padding: 9px 16px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.55);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    z-index: 9999;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
   /* drag-to-resize grip, anchored on the bottom-right golden bracket */
   .resize-grip {
     position: absolute;
@@ -1114,6 +1190,17 @@
     <span class="badge" title="Chon 2019 : bregma fiducial 332 µm into the CCF dorsal volume">bregma DV = 332 µm</span>
     <span class="badge" title="CCFv3 to stereotaxic: pitch rotation + per-axis scaling (Pinpoint)">CCF→stereo &nbsp;pitch +5°, scale AP 1.031 / ML 0.952 / DV 0.885</span>
     <span class="badge live">live</span>
+    <button type="button" class="badge help-btn" id="shareBtn" title="Copy a share link that restores this exact planning state">⎘ Share link</button>
+    <div class="export-menu" id="exportMenu">
+      <button type="button" class="badge help-btn" id="exportBtn" title="Export options">↓ Export</button>
+      <div class="export-dropdown" id="exportDropdown" hidden>
+        <button type="button" data-act="png-cor">Save PNG · coronal</button>
+        <button type="button" data-act="png-sag">Save PNG · sagittal</button>
+        <button type="button" data-act="png-both">Save PNG · both views</button>
+        <button type="button" data-act="copy-url">Copy share link</button>
+        <button type="button" data-act="csv-traversal">Download traversal CSV</button>
+      </div>
+    </div>
     <button type="button" class="badge help-btn" id="tourBtn" title="Show the tutorial">? Tour</button>
   </div>
 </header>
@@ -1281,6 +1368,7 @@
           <span class="tick-tl"></span><span class="tick-br"></span>
           <canvas id="coronal" width="912" height="640"></canvas>
           <div class="hover-tooltip" id="hoverTooltipCor"></div>
+          <button type="button" class="canvas-export" title="Download PNG of this view" aria-label="Download PNG">↓ PNG</button>
           <span class="resize-grip" title="Drag to resize · double-click to reset"></span>
         </div>
         <div class="scale-row">
@@ -1298,6 +1386,7 @@
           <span class="tick-tl"></span><span class="tick-br"></span>
           <canvas id="sagittal" width="1056" height="640"></canvas>
           <div class="hover-tooltip" id="hoverTooltipSag"></div>
+          <button type="button" class="canvas-export" title="Download PNG of this view" aria-label="Download PNG">↓ PNG</button>
           <span class="resize-grip" title="Drag to resize · double-click to reset"></span>
         </div>
         <div class="scale-row">
@@ -1406,6 +1495,8 @@
   <span class="bmc-icon">☕</span>
   <span class="bmc-label">buy me a coffee</span>
 </a>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- Onboarding spotlight tour -->
 <div class="tour" id="tour" hidden>
@@ -1686,6 +1777,8 @@ async function init() {
   }
   setupCanvasResize();
   setupTour();
+  setupExports();
+  loadStateFromHash();
   render();
 }
 
@@ -1856,6 +1949,285 @@ function setupTour() {
   window.addEventListener('resize', () => { if (!tour.hidden) place(); });
 
   if (!localStorage.getItem(TOUR_KEY)) setTimeout(open, 600);
+}
+
+// ----- Export: PNG, share URL, traversal CSV -----
+// Fields whose state is captured in the URL hash and in PNG captions.
+// type drives serialization: 'checkbox' = '0'|'1', 'number' = string, 'string' = string.
+const STATE_FIELDS = [
+  ['ap','number'], ['ml','number'], ['dv','number'], ['dvRef','string'],
+  ['mlTilt','number'], ['apTilt','number'],
+  ['bregmaAP','number'], ['bregmaML','number'], ['bregmaDV','number'],
+  ['probeWidthOn','checkbox'], ['probeWidthUm','number'],
+  ['regionOutlinesOn','checkbox'],
+  ['optoOn','checkbox'], ['optoBilateral','checkbox'],
+  ['optoWavelength','string'], ['optoCustomWl','number'],
+  ['optoS','number'], ['optoNA','number'], ['optoPowerMw','number'], ['optoThreshold','number'],
+];
+
+function serializeStateToHash() {
+  const parts = [];
+  for (const [id, type] of STATE_FIELDS) {
+    const el = document.getElementById(id); if (!el) continue;
+    const v = type === 'checkbox' ? (el.checked ? '1' : '0') : el.value;
+    parts.push(encodeURIComponent(id) + '=' + encodeURIComponent(v));
+  }
+  return parts.join('&');
+}
+let urlSyncTimer = 0;
+function scheduleUrlSync() {
+  if (urlSyncTimer) clearTimeout(urlSyncTimer);
+  urlSyncTimer = setTimeout(() => {
+    try { history.replaceState(null, '', '#' + serializeStateToHash()); } catch (_) {}
+  }, 250);
+}
+function loadStateFromHash() {
+  const raw = location.hash.replace(/^#/, '');
+  if (!raw) return false;
+  const params = new URLSearchParams(raw);
+  let any = false;
+  for (const [id, type] of STATE_FIELDS) {
+    if (!params.has(id)) continue;
+    const el = document.getElementById(id); if (!el) continue;
+    const v = params.get(id);
+    if (type === 'checkbox') el.checked = v === '1';
+    else el.value = v;
+    any = true;
+  }
+  // wavelength preset may need to reveal the custom-λ field
+  const wl = document.getElementById('optoWavelength');
+  const cust = document.getElementById('optoCustomWlField');
+  if (wl && cust) cust.style.display = wl.value === 'custom' ? '' : 'none';
+  return any;
+}
+
+function toast(msg, ms = 1600) {
+  const t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+function exportCaption(view) {
+  const ap = parseFloat(document.getElementById('ap').value);
+  const ml = parseFloat(document.getElementById('ml').value);
+  const dv = parseFloat(document.getElementById('dv').value);
+  const mlTilt = parseFloat(document.getElementById('mlTilt').value);
+  const apTilt = parseFloat(document.getElementById('apTilt').value);
+  const refEl = document.getElementById('dvRef');
+  const ref = refEl.selectedOptions[0] ? refEl.selectedOptions[0].textContent : refEl.value;
+  const optoOn = document.getElementById('optoOn').checked;
+  const wl = document.getElementById('optoWavelength').value;
+  const wlText = wl === 'custom'
+    ? (document.getElementById('optoCustomWl').value + ' nm')
+    : (wl + ' nm');
+  const pw = document.getElementById('optoPowerMw').value;
+  const bilateral = document.getElementById('optoBilateral').checked;
+  const sgn = (x) => (x >= 0 ? '+' : '') + x.toFixed(2);
+  const tiltText = (Math.abs(mlTilt) > 1e-6 || Math.abs(apTilt) > 1e-6)
+    ? `  ·  tilt ML ${mlTilt}° / AP ${apTilt}°` : '';
+  return {
+    line1: `${view}  ·  AP ${sgn(ap)}  /  ML ${sgn(ml)}  /  DV ${sgn(dv)} mm${tiltText}`,
+    line2: `DV ref: ${ref}` + (optoOn ? `  ·  ${wlText}  ·  ${pw} mW${bilateral ? '  ·  bilateral' : ''}` : ''),
+  };
+}
+
+function safeName(s) { return String(s).replace(/[^A-Za-z0-9.+\-]/g, '_'); }
+function fileBase(view) {
+  const ap = document.getElementById('ap').value;
+  const ml = document.getElementById('ml').value;
+  const dv = document.getElementById('dv').value;
+  return `bregmalambda_${view}_AP${safeName(ap)}_ML${safeName(ml)}_DV${safeName(dv)}`;
+}
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+// Composite: source canvas on top, caption strip below.
+function renderExportCanvas(srcCanvas, view) {
+  const cap = exportCaption(view);
+  const stripH = 64;
+  const out = document.createElement('canvas');
+  out.width = srcCanvas.width;
+  out.height = srcCanvas.height + stripH;
+  const c = out.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  c.fillStyle = '#0c0e12';
+  c.fillRect(0, 0, out.width, out.height);
+  c.drawImage(srcCanvas, 0, 0);
+  // strip
+  c.fillStyle = '#0c0e12';
+  c.fillRect(0, srcCanvas.height, out.width, stripH);
+  c.fillStyle = '#161a21';
+  c.fillRect(0, srcCanvas.height, out.width, 1);
+  // caption text
+  c.fillStyle = '#ece9e0';
+  c.font = '600 14px "JetBrains Mono", ui-monospace, monospace';
+  c.textBaseline = 'top';
+  c.fillText(cap.line1, 14, srcCanvas.height + 14);
+  c.fillStyle = '#b8b6ad';
+  c.font = '400 12px "JetBrains Mono", ui-monospace, monospace';
+  c.fillText(cap.line2, 14, srcCanvas.height + 36);
+  // branding bottom-right
+  c.textAlign = 'right';
+  c.fillStyle = '#ffba5c';
+  c.font = '700 11px "JetBrains Mono", ui-monospace, monospace';
+  c.fillText('bregma·lambda', out.width - 14, srcCanvas.height + 36);
+  c.textAlign = 'start';
+  return out;
+}
+function exportPNG(view) {
+  const src = view === 'coronal' ? COR : SAG;
+  renderExportCanvas(src, view).toBlob(b => {
+    downloadBlob(b, fileBase(view) + '.png');
+    toast(`Saved ${view} PNG`);
+  }, 'image/png');
+}
+// Single composite: coronal | sagittal side-by-side with per-view header
+// strips, a shared caption at the bottom, and bregma·lambda branding.
+function exportBothPNG() {
+  const gap = 18;
+  const headerH = 26;     // small label above each panel
+  const captionH = 64;    // bottom strip shared by both views
+  const padX = 14;
+  const corW = COR.width, corH = COR.height;
+  const sagW = SAG.width, sagH = SAG.height;
+  const innerH = Math.max(corH, sagH);
+  const W = padX * 2 + corW + gap + sagW;
+  const H = headerH + innerH + captionH;
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  const c = out.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  c.fillStyle = '#0c0e12';
+  c.fillRect(0, 0, W, H);
+
+  // per-view header labels
+  c.fillStyle = '#ffba5c';
+  c.font = '700 11px "JetBrains Mono", ui-monospace, monospace';
+  c.textBaseline = 'top';
+  c.fillText('CORONAL · ML horizontal · DV vertical',           padX,                  6);
+  c.fillText('SAGITTAL · AP horizontal · DV vertical · ant. R', padX + corW + gap,     6);
+
+  // panels
+  c.drawImage(COR, padX,             headerH);
+  c.drawImage(SAG, padX + corW + gap, headerH);
+
+  // shared bottom caption — use the coronal caption text for the lines
+  // (target coords + opto state are identical between views).
+  const cap = exportCaption('both views');
+  const stripY = headerH + innerH;
+  c.fillStyle = '#0c0e12';
+  c.fillRect(0, stripY, W, captionH);
+  c.fillStyle = '#161a21';
+  c.fillRect(0, stripY, W, 1);
+  c.fillStyle = '#ece9e0';
+  c.font = '600 14px "JetBrains Mono", ui-monospace, monospace';
+  c.fillText(cap.line1, padX, stripY + 14);
+  c.fillStyle = '#b8b6ad';
+  c.font = '400 12px "JetBrains Mono", ui-monospace, monospace';
+  c.fillText(cap.line2, padX, stripY + 36);
+  c.textAlign = 'right';
+  c.fillStyle = '#ffba5c';
+  c.font = '700 11px "JetBrains Mono", ui-monospace, monospace';
+  c.fillText('bregma·lambda', W - padX, stripY + 36);
+  c.textAlign = 'start';
+
+  out.toBlob(b => {
+    downloadBlob(b, fileBase('both') + '.png');
+    toast('Saved composite PNG');
+  }, 'image/png');
+}
+
+function exportTraversalCSV() {
+  const rows = (viewState.traversal || []);
+  if (!rows.length) { toast('No traversal to export'); return; }
+  const header = 'index,AP_mm,ML_mm,DV_skull_mm,acronym,region';
+  const lines = [header];
+  rows.forEach((r, i) => {
+    const nameCell = '"' + (r.name || '').replace(/"/g, '""') + '"';
+    lines.push([i, r.ap.toFixed(3), r.ml.toFixed(3), r.dv.toFixed(3), r.acr, nameCell].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  downloadBlob(blob, `bregmalambda_traversal_AP${safeName(document.getElementById('ap').value)}.csv`);
+  toast('Saved traversal CSV');
+}
+
+function copyShareUrl() {
+  // make sure the hash reflects the latest state right now
+  try { history.replaceState(null, '', '#' + serializeStateToHash()); } catch (_) {}
+  const url = location.href;
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (_) {}
+    ta.remove();
+    toast(ok ? 'Share link copied' : 'Copy failed — URL is in the address bar');
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    // .then/.catch (not await) so the user-gesture chain stays intact
+    navigator.clipboard.writeText(url).then(
+      () => toast('Share link copied'),
+      () => fallback()
+    );
+  } else {
+    fallback();
+  }
+}
+
+function setupExports() {
+  // Per-canvas PNG buttons
+  for (const btn of document.querySelectorAll('.canvas-export')) {
+    const view = btn.closest('.view-pane').dataset.pane === 'cor' ? 'coronal' : 'sagittal';
+    btn.addEventListener('click', () => exportPNG(view));
+  }
+  // Standalone "Share link" badge in the header
+  const shareBtn = document.getElementById('shareBtn');
+  if (shareBtn) shareBtn.addEventListener('click', copyShareUrl);
+  // Header dropdown
+  const menu = document.getElementById('exportMenu');
+  const btn  = document.getElementById('exportBtn');
+  const dd   = document.getElementById('exportDropdown');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dd.hidden = !dd.hidden;
+  });
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target)) dd.hidden = true;
+  });
+  // bind each dropdown item directly so delegation quirks can't swallow the action
+  const ACTIONS = {
+    'png-cor':       () => exportPNG('coronal'),
+    'png-sag':       () => exportPNG('sagittal'),
+    'png-both':      () => exportBothPNG(),
+    'copy-url':      () => copyShareUrl(),
+    'csv-traversal': () => exportTraversalCSV(),
+  };
+  for (const item of dd.querySelectorAll('button[data-act]')) {
+    const act = item.dataset.act;
+    const fn  = ACTIONS[act];
+    if (!fn) continue;
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dd.hidden = true;
+      try { fn(); }
+      catch (err) { console.error('export action failed:', act, err); toast('Export failed — see console'); }
+    });
+  }
+  // Keyboard-friendly: Esc closes
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !dd.hidden) dd.hidden = true;
+  });
 }
 
 function stereoToCcfUm(ap_mm, ml_mm, dv_skull_mm) {
@@ -2355,8 +2727,9 @@ async function render() {
       const r    = regionAtCcfUm(ccf.ap, ccf.dv, ccf.ml);
       const acr  = r ? r.acronym : '?';
       const name = r ? r.name : '(outside annotated brain)';
-      if (acr !== lastAcr) { seen.push({ acr, name, dv: dv_s }); lastAcr = acr; }
+      if (acr !== lastAcr) { seen.push({ acr, name, ap: ap_s, ml: ml_s, dv: dv_s }); lastAcr = acr; }
     }
+    viewState.traversal = seen;
     html.push(
       `<details class="subsection"><summary>Probe traversal · ${seen.length} regions</summary>` +
       `<div class="body">` +
@@ -2372,6 +2745,7 @@ async function render() {
 
 
   RO.innerHTML = html.join('\n');
+  scheduleUrlSync();
 }
 
 // canvas vertical scale: px per stereotaxic mm
