@@ -1199,6 +1199,11 @@
         <input type="checkbox" class="toggle" id="optoOn">
       </div>
 
+      <div class="toggle-row">
+        <span class="label">Bilateral <span class="hint" style="text-transform:none;letter-spacing:0;">mirror across midline · sums in overlap</span></span>
+        <input type="checkbox" class="toggle" id="optoBilateral">
+      </div>
+
       <div class="field">
         <label>Wavelength <span class="hint">sets scattering S</span></label>
         <select id="optoWavelength">
@@ -1567,21 +1572,23 @@ function bindHover(view, canvas, tooltipEl) {
       const s = structures[id];
       let extra = '';
       const op = viewState.optoParams;
-      const probe = view === 'coronal' ? viewState.corProbe : viewState.sagProbe;
-      if (op && probe && viewState.pxPerMm > 0) {
-        // project hovered px onto probe axis (tip = x2,y2; entry = x1,y1)
-        const dx = probe.x2 - probe.x1, dy = probe.y2 - probe.y1;
-        const L = Math.hypot(dx, dy);
-        if (L > 1e-3) {
+      const fibers = view === 'coronal' ? viewState.corFibers : viewState.sagFibers;
+      if (op && fibers && fibers.length && viewState.pxPerMm > 0) {
+        // sum each fiber's in-plane irradiance at the hovered pixel
+        let I = 0;
+        for (const probe of fibers) {
+          const dx = probe.x2 - probe.x1, dy = probe.y2 - probe.y1;
+          const L = Math.hypot(dx, dy);
+          if (L < 1e-3) continue;
           const ux = dx / L, uy = dy / L;
           const hx = cx - probe.x2, hy = cy - probe.y2;
-          const u_px = hx * ux + hy * uy;      // along probe, past tip
-          const r_px = hx * (-uy) + hy * (ux); // perpendicular, in-plane
-          const u_mm = u_px / viewState.pxPerMm;
-          const r_mm = Math.abs(r_px) / viewState.pxPerMm;
-          const I = u_mm >= 0 ? optoIrradiance(u_mm, r_mm, op) : 0;
-          extra = `<span class="nm" style="opacity:0.85;">≈ ${I >= 0.01 ? I.toFixed(2) : I.toExponential(1)} mW/mm² <span style="color:var(--muted-2);">(in-plane)</span></span>`;
+          const u_px = hx * ux + hy * uy;
+          if (u_px < 0) continue;
+          const r_px = hx * (-uy) + hy * (ux);
+          I += optoIrradiance(u_px / viewState.pxPerMm, Math.abs(r_px) / viewState.pxPerMm, op);
         }
+        const note = fibers.length > 1 ? ' (summed, in-plane)' : ' (in-plane)';
+        extra = `<span class="nm" style="opacity:0.85;">≈ ${I >= 0.01 ? I.toFixed(2) : I.toExponential(1)} mW/mm² <span style="color:var(--muted-2);">${note}</span></span>`;
       }
       tooltipEl.innerHTML = `<span class="acr">${s.acronym}</span><span class="nm">${s.name}</span>${extra}`;
       // position relative to the canvas-frame (tooltip's offset parent)
@@ -1642,7 +1649,7 @@ async function init() {
   SAG.width  = coords.views.sagittal.image_size_px[0] * SCALE;
   SAG.height = canvasH;
   for (const id of ['ap','ml','dv','mlTilt','apTilt','dvRef','probeWidthOn','probeWidthUm','regionOutlinesOn','bregmaAP','bregmaML','bregmaDV',
-                    'optoOn','optoWavelength','optoCustomWl','optoS','optoNA','optoPowerMw','optoThreshold']) {
+                    'optoOn','optoBilateral','optoWavelength','optoCustomWl','optoS','optoNA','optoPowerMw','optoThreshold']) {
     document.getElementById(id).addEventListener('input', render);
     document.getElementById(id).addEventListener('change', render);
   }
@@ -2117,15 +2124,40 @@ async function render() {
   ctxC.setLineDash([]);
   // probe-width band (translucent) behind the line
   if (probeHalfPx > 0) drawProbeBand(ctxC, sx_c, sy_c, tx, ty, probeHalfPx);
-  viewState.corProbe = { x1: sx_c, y1: sy_c, x2: tx, y2: ty };
-  // light spread (heatmap + isocontours), drawn under the probe line
-  if (optoParams) drawLightField(ctxC, sx_c, sy_c, tx, ty, optoParams, pxPerMm());
+  // bilateral: mirror the probe across the midline (ml → -ml on every point).
+  // The Allen brain is built symmetric, so the mirror's skull/pial depths
+  // match the original's. Drawn only on the coronal canvas because the
+  // sagittal slice sits at the original ML and the mirror is on the opposite
+  // ML slice (its in-plane contribution at this slice is ~0 off-axis).
+  const bilateral = optoParams && document.getElementById('optoBilateral').checked;
+  let mirrorCor = null;
+  if (bilateral) {
+    const [m_ex, m_ey]     = corPx(-traj.refEntry.ml,   traj.refEntry.dv_skull,   traj.refEntry.ap);
+    const [m_sx_c, m_sy_c] = corPx(-traj.skullEntry.ml, traj.skullEntry.dv_skull, traj.skullEntry.ap);
+    const [m_tx, m_ty]     = corPx(-traj.target.ml,     traj.target.dv_skull,     traj.target.ap);
+    mirrorCor = { ex: m_ex, ey: m_ey, sx: m_sx_c, sy: m_sy_c, tx: m_tx, ty: m_ty };
+    if (probeHalfPx > 0) drawProbeBand(ctxC, m_sx_c, m_sy_c, m_tx, m_ty, probeHalfPx);
+  }
+  const corFibers = [{ x1: sx_c, y1: sy_c, x2: tx, y2: ty }];
+  if (mirrorCor) corFibers.push({ x1: mirrorCor.sx, y1: mirrorCor.sy, x2: mirrorCor.tx, y2: mirrorCor.ty });
+  viewState.corProbe = corFibers[0];
+  viewState.corFibers = corFibers;
+  // light spread (summed heatmap + per-fiber isocontours), under the probe line
+  if (optoParams) drawLightField(ctxC, corFibers, optoParams, pxPerMm());
   // full physical probe path: skull entry → target. Solid bright core.
   drawProbe(ctxC, sx_c, sy_c, tx, ty);
-  if (dvRef !== 'skull') drawDrillTick(ctxC, sx_c, sy_c);
+  if (mirrorCor) drawProbe(ctxC, mirrorCor.sx, mirrorCor.sy, mirrorCor.tx, mirrorCor.ty);
+  if (dvRef !== 'skull') {
+    drawDrillTick(ctxC, sx_c, sy_c);
+    if (mirrorCor) drawDrillTick(ctxC, mirrorCor.sx, mirrorCor.sy);
+  }
   // primary blue dot at the chosen DV reference surface
   drawMarker(ctxC, ex, ey, '#7be0ff');
   drawMarker(ctxC, tx, ty, '#ff6f86');
+  if (mirrorCor) {
+    drawMarker(ctxC, mirrorCor.ex, mirrorCor.ey, '#7be0ff');
+    drawMarker(ctxC, mirrorCor.tx, mirrorCor.ty, '#ff6f86');
+  }
   if (!inAtlas) drawWarnRing(ctxC, tx, ty);
 
   // ----- Sagittal -----
@@ -2177,9 +2209,12 @@ async function render() {
   ctxS.setLineDash([]);
   if (probeHalfPx > 0) drawProbeBand(ctxS, ssx, ssy, stx, sty, probeHalfPx);
   viewState.sagProbe = { x1: ssx, y1: ssy, x2: stx, y2: sty };
+  viewState.sagFibers = [{ x1: ssx, y1: ssy, x2: stx, y2: sty }];
   viewState.optoParams = optoParams;
   viewState.pxPerMm = pxPerMm();
-  if (optoParams) drawLightField(ctxS, ssx, ssy, stx, sty, optoParams, pxPerMm());
+  // sagittal: render only the in-slice fiber; the bilateral mirror lives on
+  // the opposite-ML slice so it contributes ~nothing here off-axis.
+  if (optoParams) drawLightField(ctxS, viewState.sagFibers, optoParams, pxPerMm());
   drawProbe(ctxS, ssx, ssy, stx, sty);
   if (dvRef !== 'skull') drawDrillTick(ctxS, ssx, ssy);
   drawMarker(ctxS, sex, sey, '#7be0ff');
@@ -2295,7 +2330,10 @@ async function render() {
       `<div>Tip irradiance: <b>${I_tip.toFixed(1)}</b> mW/mm²</div>` +
       `<div>Depth at ${p.threshold.toFixed(2)} mW/mm²: <b>${depth_thr == null ? '>15' : depth_thr.toFixed(2)}</b> mm along axis</div>` +
       `<div>Radius at tip plane: <b>${radius_thr.toFixed(3)}</b> mm</div>` +
-      `<div>Illuminated volume ≥ threshold: <b>${vol.toFixed(3)}</b> mm³</div>` +
+      `<div>Illuminated volume ≥ threshold: <b>${vol.toFixed(3)}</b> mm³ <span class="secondary">per fiber</span></div>` +
+      (document.getElementById('optoBilateral').checked
+        ? `<div class="secondary" style="margin-top:6px;">Bilateral on — irradiance sums in overlap zones on the coronal view (hover for the local sum). The numbers above are per-fiber; per-fiber thresholds and volume are unchanged.</div>`
+        : '') +
       `<div class="secondary" style="margin-top:6px;">Model: Kubelka–Munk (Aravanis 2007; Yizhar 2011). 2-D slice through a 3-D cone — values off the slice plane aren't shown. Assumes flat-cut multimode fiber, gray-matter scattering, n_tissue = 1.36.</div>` +
       `</div></details>`
     );
@@ -2740,20 +2778,15 @@ function optoIrradiance(u_mm, r_mm, p) {
   return I_axis * Math.exp(-2.0 * r_mm * r_mm / (w * w));
 }
 
-// Render a magma-ish heatmap + iso-contours of the predicted irradiance
-// field on a 2-D atlas slice. (x1,y1) is the skull entry, (x2,y2) is the
-// probe tip in canvas px. Light propagates past the tip, away from entry.
-function drawLightField(ctx, x1, y1, x2, y2, params, pxPerMm) {
-  const dx = x2 - x1, dy = y2 - y1;
-  const len = Math.hypot(dx, dy);
-  if (len < 1e-3) return;
-  const ux = dx / len, uy = dy / len;          // unit along probe (entry→tip)
-  const nx = -uy,      ny = ux;                 // unit perpendicular in-plane
-  const W = ctx.canvas.width, H = ctx.canvas.height;
-  // Build a bounding box of pixels worth evaluating: stop when on-axis
-  // irradiance drops below floor (≈0.01 of threshold or 1e-3 mW/mm²).
+// Render a wavelength-tinted heatmap + iso-contours of the predicted
+// irradiance field on a 2-D atlas slice. `fibers` is one or more
+// {x1,y1,x2,y2} entries (entry→tip) in canvas px; irradiance is summed
+// across all fibers per pixel (incoherent light is additive), which is
+// how a bilateral implant glows brighter where the two cones overlap.
+function drawLightField(ctx, fibers, params, pxPerMm) {
+  if (!fibers || !fibers.length) return;
+  // Precompute geometry (unit vectors, axial/lateral extents) per fiber.
   const floor = Math.max(1e-3, params.threshold * 0.01);
-  // axial extent: solve numerically (cheap stepping)
   let u_max_mm = 0;
   for (let u = 0; u < 12; u += 0.05) {
     if (optoIrradiance(u, 0, params) < floor) { u_max_mm = u; break; }
@@ -2762,17 +2795,25 @@ function drawLightField(ctx, x1, y1, x2, y2, params, pxPerMm) {
   const r_max_mm = (params.rho_mm + u_max_mm * params.tanTheta) * 2.5;
   const u_max_px = u_max_mm * pxPerMm;
   const r_max_px = r_max_mm * pxPerMm;
-  // axis-aligned bbox in canvas px
-  const corners = [
-    [ x2 + ux*0      + nx*(-r_max_px), y2 + uy*0      + ny*(-r_max_px) ],
-    [ x2 + ux*0      + nx*( r_max_px), y2 + uy*0      + ny*( r_max_px) ],
-    [ x2 + ux*u_max_px + nx*(-r_max_px), y2 + uy*u_max_px + ny*(-r_max_px) ],
-    [ x2 + ux*u_max_px + nx*( r_max_px), y2 + uy*u_max_px + ny*( r_max_px) ],
-  ];
+  const fg = fibers.map(f => {
+    const dx = f.x2 - f.x1, dy = f.y2 - f.y1;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x2: f.x2, y2: f.y2, ux: dx / len, uy: dy / len, nx: -dy / len, ny: dx / len };
+  });
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  // Union bbox: each fiber's cone footprint expanded by r_max.
   let xmin = W, xmax = 0, ymin = H, ymax = 0;
-  for (const [px, py] of corners) {
-    if (px < xmin) xmin = px; if (px > xmax) xmax = px;
-    if (py < ymin) ymin = py; if (py > ymax) ymax = py;
+  for (const g of fg) {
+    const corners = [
+      [g.x2 + g.nx*(-r_max_px),                  g.y2 + g.ny*(-r_max_px)],
+      [g.x2 + g.nx*( r_max_px),                  g.y2 + g.ny*( r_max_px)],
+      [g.x2 + g.ux*u_max_px + g.nx*(-r_max_px),  g.y2 + g.uy*u_max_px + g.ny*(-r_max_px)],
+      [g.x2 + g.ux*u_max_px + g.nx*( r_max_px),  g.y2 + g.uy*u_max_px + g.ny*( r_max_px)],
+    ];
+    for (const [px, py] of corners) {
+      if (px < xmin) xmin = px; if (px > xmax) xmax = px;
+      if (py < ymin) ymin = py; if (py > ymax) ymax = py;
+    }
   }
   xmin = Math.max(0, Math.floor(xmin));  xmax = Math.min(W - 1, Math.ceil(xmax));
   ymin = Math.max(0, Math.floor(ymin));  ymax = Math.min(H - 1, Math.ceil(ymax));
@@ -2780,24 +2821,24 @@ function drawLightField(ctx, x1, y1, x2, y2, params, pxPerMm) {
   const bw = xmax - xmin + 1, bh = ymax - ymin + 1;
   const img = ctx.createImageData(bw, bh);
   const data = img.data;
-  // log-scale, single-hue colormap tinted by the light's wavelength so it
-  // visually reads as blue / green / amber / red light. Ramp: black → hue →
-  // white-hot core. Blended with 'screen' over the dark atlas below.
-  const I_max = optoIrradiance(0, 0, params);
+  // log-scale ramp: black → hue → white-hot core (screen-blended over atlas).
+  // I_max scaled by fiber count so overlap zones can reach pure white.
+  const I_max = optoIrradiance(0, 0, params) * fibers.length;
   const logLo = Math.log10(floor);
   const logHi = Math.log10(Math.max(I_max, floor * 10));
   const [hr, hg, hb] = params.color || [255, 186, 92];
-  const PIVOT = 0.72;   // below: ramp up to full hue; above: blend toward white
+  const PIVOT = 0.72;
   for (let py = 0; py < bh; py++) {
     for (let px = 0; px < bw; px++) {
-      const cx = (px + xmin) - x2;
-      const cy = (py + ymin) - y2;
-      const u_px = cx * ux + cy * uy;
-      const r_px = cx * nx + cy * ny;
-      if (u_px < 0) continue;
-      const u_mm = u_px / pxPerMm;
-      const r_mm = Math.abs(r_px) / pxPerMm;
-      const I = optoIrradiance(u_mm, r_mm, params);
+      const cxAbs = px + xmin, cyAbs = py + ymin;
+      let I = 0;
+      for (const g of fg) {
+        const cx = cxAbs - g.x2, cy = cyAbs - g.y2;
+        const u_px = cx * g.ux + cy * g.uy;
+        if (u_px < 0) continue;
+        const r_px = cx * g.nx + cy * g.ny;
+        I += optoIrradiance(u_px / pxPerMm, Math.abs(r_px) / pxPerMm, params);
+      }
       if (I < floor) continue;
       const t = Math.max(0, Math.min(1, (Math.log10(I) - logLo) / (logHi - logLo)));
       let r8, g8, b8;
@@ -2826,18 +2867,22 @@ function drawLightField(ctx, x1, y1, x2, y2, params, pxPerMm) {
   ctx.drawImage(off, xmin, ymin);
   ctx.restore();
 
-  // Iso-contours: 10, 1, 0.1 mW/mm² (skip those above tip irradiance).
+  // Iso-contours: 10, threshold, threshold/10. Per-fiber analytical envelopes
+  // (single-fiber model) — the heatmap shows the summed field; the contours
+  // mark each fiber's own coverage so overlap zones read as "both above
+  // threshold simultaneously". The headline iso label is drawn once per
+  // contour level, on the first fiber, so the canvas doesn't clutter.
+  const I_max_single = optoIrradiance(0, 0, params);
   const isos = [10, params.threshold, params.threshold * 0.1].filter(
-    (v, i, a) => v > 0 && v <= I_max && a.indexOf(v) === i
+    (v, i, a) => v > 0 && v <= I_max_single && a.indexOf(v) === i
   );
   ctx.save();
   ctx.lineWidth = 1.2;
   ctx.font = '600 10px "JetBrains Mono", ui-monospace, monospace';
   ctx.textBaseline = 'middle';
   for (const iso of isos) {
-    // For each axial step u, solve r where I(u,r) = iso:
-    //   exp(-2r²/w²) = iso / I_axis(u)
-    //   r = w · sqrt(-ln(iso/I_axis) / 2)
+    const isMain = Math.abs(iso - params.threshold) < 1e-9;
+    // Compute the analytical (u, r) curve once — same for every fiber.
     const pts = [];
     const step_mm = 0.02;
     for (let u_mm = 0; u_mm <= u_max_mm; u_mm += step_mm) {
@@ -2850,39 +2895,39 @@ function drawLightField(ctx, x1, y1, x2, y2, params, pxPerMm) {
       pts.push([u_mm, r_mm]);
     }
     if (pts.length < 2) continue;
-    // emphasize the user-chosen threshold
-    const isMain = Math.abs(iso - params.threshold) < 1e-9;
     ctx.strokeStyle = isMain ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.5)';
     ctx.lineWidth = isMain ? 1.6 : 1.0;
     ctx.setLineDash(isMain ? [] : [4, 3]);
-    ctx.beginPath();
-    // upper half
-    for (let i = 0; i < pts.length; i++) {
-      const [u_mm, r_mm] = pts[i];
-      const px = x2 + ux * u_mm * pxPerMm + nx * r_mm * pxPerMm;
-      const py = y2 + uy * u_mm * pxPerMm + ny * r_mm * pxPerMm;
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    // lower half (mirror across axis), traced backwards to close cleanly
-    for (let i = pts.length - 1; i >= 0; i--) {
-      const [u_mm, r_mm] = pts[i];
-      const px = x2 + ux * u_mm * pxPerMm + nx * (-r_mm) * pxPerMm;
-      const py = y2 + uy * u_mm * pxPerMm + ny * (-r_mm) * pxPerMm;
-      ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.stroke();
+    fg.forEach((g, gi) => {
+      ctx.beginPath();
+      for (let i = 0; i < pts.length; i++) {
+        const [u_mm, r_mm] = pts[i];
+        const px = g.x2 + g.ux * u_mm * pxPerMm + g.nx * r_mm * pxPerMm;
+        const py = g.y2 + g.uy * u_mm * pxPerMm + g.ny * r_mm * pxPerMm;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      for (let i = pts.length - 1; i >= 0; i--) {
+        const [u_mm, r_mm] = pts[i];
+        const px = g.x2 + g.ux * u_mm * pxPerMm + g.nx * (-r_mm) * pxPerMm;
+        const py = g.y2 + g.uy * u_mm * pxPerMm + g.ny * (-r_mm) * pxPerMm;
+        ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      // label only on the first fiber to avoid double labels
+      if (gi === 0) {
+        const last = pts[pts.length - 1];
+        const lx = g.x2 + g.ux * last[0] * pxPerMm + g.nx * (last[1] + 0.06) * pxPerMm;
+        const ly = g.y2 + g.uy * last[0] * pxPerMm + g.ny * (last[1] + 0.06) * pxPerMm;
+        const label = `${iso >= 1 ? iso.toFixed(0) : iso.toFixed(2)} mW/mm²`;
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(0,0,0,0.72)';
+        ctx.fillRect(lx - 3, ly - 7, tw + 6, 14);
+        ctx.fillStyle = isMain ? '#ffffff' : 'rgba(255,255,255,0.8)';
+        ctx.fillText(label, lx, ly);
+      }
+    });
     ctx.setLineDash([]);
-    // label near the contour's deepest axial point
-    const last = pts[pts.length - 1];
-    const lx = x2 + ux * last[0] * pxPerMm + nx * (last[1] + 0.06) * pxPerMm;
-    const ly = y2 + uy * last[0] * pxPerMm + ny * (last[1] + 0.06) * pxPerMm;
-    const label = `${iso >= 1 ? iso.toFixed(0) : iso.toFixed(2)} mW/mm²`;
-    const tw = ctx.measureText(label).width;
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(lx - 3, ly - 7, tw + 6, 14);
-    ctx.fillStyle = isMain ? '#ffffff' : 'rgba(255,255,255,0.8)';
-    ctx.fillText(label, lx, ly);
   }
   ctx.restore();
 }
